@@ -149,7 +149,7 @@ function messageElement(message) {
   if (message.role === 'assistant') {
     const label = document.createElement('div');
     label.className = 'message-label';
-    label.textContent = 'Study App';
+    label.textContent = 'OpenCode';
     element.append(label);
   }
   if (message.image) {
