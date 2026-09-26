@@ -237,7 +237,9 @@ function openWindow(url) {
   if (process.env.STUDY_NO_BROWSER === '1') { console.log(`起動URL: ${url}`); return; }
   if (process.platform === 'win32') {
     const edge = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-    if (existsSync(edge)) return spawn(edge, [`--app=${url}`, '--window-size=1320,850'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    // 初回起動時のウェルカム画面が --app ウィンドウを空白にするため抑止する。
+    const edgeArgs = [`--app=${url}`, '--window-size=1320,850', '--no-first-run', '--no-default-browser-check'];
+    if (existsSync(edge)) return spawn(edge, edgeArgs, { detached: true, stdio: 'ignore', windowsHide: true }).unref();
     spawn('cmd.exe', ['/c', 'start', '', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   } else {
     spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
