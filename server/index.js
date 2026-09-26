@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile, writeFile, unlink } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -243,6 +243,13 @@ async function runningInstance() {
   } catch { return null; }
 }
 
+function cleanupInstance() {
+  try {
+    const current = JSON.parse(readFileSync(instancePath, 'utf8'));
+    if (current.secret === launchSecret) unlinkSync(instancePath);
+  } catch { /* 他プロセスの起動情報は消さない */ }
+}
+
 async function main() {
   await store.init();
   const existing = await runningInstance();
@@ -251,6 +258,9 @@ async function main() {
     openWindow(existing);
     return;
   }
+  process.on('exit', cleanupInstance);
+  process.on('SIGINT', () => process.exit(0));
+  process.on('SIGTERM', () => process.exit(0));
   const server = await createServer();
   server.listen(0, '127.0.0.1', async () => {
     const address = server.address();
