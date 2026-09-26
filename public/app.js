@@ -366,6 +366,12 @@ async function readFile(file) {
   });
   state.image = { name: file.name, type: file.type || 'application/octet-stream', data };
   $('attachmentName').textContent = file.name;
+  const thumb = $('attachmentThumb');
+  if ((file.type || '').startsWith('image/')) {
+    thumb.src = data;
+    thumb.hidden = false;
+    thumb.onclick = () => openLightbox(data, file.name);
+  } else thumb.hidden = true;
   $('attachmentChip').hidden = false;
 }
 
