@@ -105,7 +105,7 @@ async function runJob({ chat, text, action, model, attachment, lesson, controlle
       },
       onEvent: event => {
         const progress = progressFromEvent(event);
-        if (chat.job && progress) record(progress.type, progress.text);
+        if (chat.job && progress) record(progress.type, progress.text, progress.detail);
       }
     });
     await writes;

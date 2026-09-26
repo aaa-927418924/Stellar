@@ -84,8 +84,14 @@ function messageElement(message) {
     for (const entry of message.progress) {
       const item = document.createElement('li');
       item.className = `progress-${entry.type}`;
-      const label = entry.type === 'thought' ? '思考' : entry.type === 'tool' ? '調査・ツール' : '状態';
+      const label = entry.type === 'thought' ? '思考' : entry.type === 'tool' ? 'ツール' : '状態';
       item.textContent = `${label} · ${entry.text}`;
+      if (entry.detail) {
+        const detail = document.createElement('pre');
+        detail.className = 'progress-detail';
+        detail.textContent = entry.detail;
+        item.append(detail);
+      }
       list.append(item);
     }
     details.append(list);
