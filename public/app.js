@@ -3,6 +3,61 @@ const state = { chats: [], current: null, submitting: false, polling: false, ima
 
 function modelName(value) { return value || 'Muse Spark 1.3 Free（既定）'; }
 
+function clampPane(value, min, max) { return Math.min(max, Math.max(min, value)); }
+
+function storedPaneWidth(key) {
+  try {
+    const value = Number(localStorage.getItem(key));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  } catch { return null; }
+}
+
+function applyPaneWidths() {
+  const doc = document.documentElement;
+  const sidebar = storedPaneWidth('study-sidebar-width');
+  if (window.innerWidth > 1100 && sidebar) doc.style.setProperty('--sidebar-w', `${clampPane(sidebar, 200, 420)}px`);
+  else doc.style.removeProperty('--sidebar-w');
+  const preview = storedPaneWidth('study-preview-width');
+  if (window.innerWidth > 900 && preview) doc.style.setProperty('--preview-w', `${clampPane(preview, 320, 900)}px`);
+  else doc.style.removeProperty('--preview-w');
+}
+
+function makePaneResizable(handleId, targetId, config) {
+  const handle = $(handleId);
+  let startX = 0, startW = 0, dragging = false;
+  handle.addEventListener('pointerdown', event => {
+    if (event.button !== undefined && event.button !== 0) return;
+    dragging = true;
+    startX = event.clientX;
+    startW = $(targetId).getBoundingClientRect().width;
+    handle.classList.add('dragging');
+    try { handle.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+    event.preventDefault();
+  });
+  handle.addEventListener('pointermove', event => {
+    if (!dragging) return;
+    const width = clampPane(Math.round(startW + config.direction * (event.clientX - startX)), config.min, config.max);
+    document.documentElement.style.setProperty(config.varName, `${width}px`);
+  });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    try { localStorage.setItem(config.key, String(Math.round($(targetId).getBoundingClientRect().width))); } catch { /* ignore */ }
+  };
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
+  handle.addEventListener('keydown', event => {
+    const delta = event.key === 'ArrowRight' ? 12 : event.key === 'ArrowLeft' ? -12 : 0;
+    if (!delta) return;
+    event.preventDefault();
+    const base = storedPaneWidth(config.key) || $(targetId).getBoundingClientRect().width;
+    const width = clampPane(Math.round(base + config.direction * delta), config.min, config.max);
+    document.documentElement.style.setProperty(config.varName, `${width}px`);
+    try { localStorage.setItem(config.key, String(width)); } catch { /* ignore */ }
+  });
+}
+
 function showToast(message) {
   const toast = $('toast');
   toast.textContent = message;
@@ -298,6 +353,11 @@ $('settingsForm').addEventListener('submit', async event => {
     $('settingsDialog').close();
   } catch (error) { showToast(error.message); }
 });
+
+makePaneResizable('sidebarHandle', 'sidebar', { key: 'study-sidebar-width', min: 200, max: 420, varName: '--sidebar-w', direction: 1 });
+makePaneResizable('previewHandle', 'previewPane', { key: 'study-preview-width', min: 320, max: 900, varName: '--preview-w', direction: -1 });
+applyPaneWidths();
+window.addEventListener('resize', applyPaneWidths);
 
 async function poll() {
   if (state.polling) return;
