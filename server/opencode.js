@@ -11,6 +11,36 @@ function command() {
   return 'opencode';
 }
 
+export const DEFAULT_MODEL = 'opencode/muse-spark-1.3-contributor-free';
+
+export function parseModelList(text) {
+  const clean = String(text || '').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  const ids = [];
+  for (const line of clean.split('\n')) {
+    const match = /[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/.exec(line);
+    if (match && !ids.includes(match[0])) ids.push(match[0]);
+  }
+  return ids;
+}
+
+export async function listModels({ cwd, timeoutMs = 20000 } = {}) {
+  const child = spawn(command(), ['models'], { cwd, windowsHide: true, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let output = '';
+  let stderr = '';
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', chunk => { output += chunk; });
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-2000); });
+  const code = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { child.kill(); reject(new Error('モデル一覧の取得がタイムアウトしました。')); }, timeoutMs);
+    child.on('error', error => { clearTimeout(timer); reject(error); });
+    child.on('close', value => { clearTimeout(timer); resolve(value); });
+  });
+  const models = parseModelList(output);
+  if (code !== 0 || models.length === 0) throw new Error(stderr.trim() || 'モデル一覧を取得できませんでした。OpenCodeの認証を確認してください。');
+  return models;
+}
+
 export async function runOpenCode({ promptFile, model, attachment, onText, onEvent, signal, cwd }) {
   const args = ['run', '--pure', '--format', 'json', '--thinking', '--agent', 'study', '--dir', cwd];
   if (model) args.push('--model', model);

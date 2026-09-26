@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { Store } from './store.js';
 import { buildPrompt, extractHtml } from './prompts.js';
-import { runOpenCode } from './opencode.js';
+import { runOpenCode, listModels, DEFAULT_MODEL } from './opencode.js';
 import { appendProgress, progressFromEvent } from './progress.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,6 +21,7 @@ const instancePath = path.join(store.root, 'instance.json');
 const launchSecret = randomBytes(32).toString('hex');
 const active = new Map();
 const MAX_BODY = 12_000_000;
+let modelCache = { at: 0, models: [] };
 
 function json(res, status, value) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -91,7 +92,7 @@ async function runJob({ chat, text, action, model, attachment, lesson, controlle
       await writeFile(imageFile, attachment.bytes);
     }
     record('status', 'OpenCodeを起動しました。');
-    const result = await runOpenCode({ promptFile, attachment: imageFile, model, cwd: root, signal: controller.signal,
+    const result = await runOpenCode({ promptFile, attachment: imageFile, model: model || DEFAULT_MODEL, cwd: root, signal: controller.signal,
       onText: fragment => {
         if (action === 'ask' && chat.job) {
           chat.job.partialAnswer = (chat.job.partialAnswer + fragment).slice(0, 80000);
@@ -104,7 +105,7 @@ async function runJob({ chat, text, action, model, attachment, lesson, controlle
         }
       },
       onEvent: event => {
-        const progress = progressFromEvent(event);
+        const progress = progressFromEvent(event, chat);
         if (chat.job && progress) record(progress.type, progress.text, progress.detail);
       }
     });
@@ -186,6 +187,12 @@ export async function createServer() {
       if (req.method === 'GET' && url.pathname === '/api/chats') return json(res, 200, (await store.list()).map(summary));
       if (req.method === 'POST' && url.pathname === '/api/chats') return json(res, 201, await store.create());
       if (req.method === 'GET' && url.pathname === '/api/settings') return json(res, 200, await store.settings());
+      if (req.method === 'GET' && url.pathname === '/api/models') {
+        if (Date.now() - modelCache.at > 600_000) {
+          modelCache = { at: Date.now(), models: await listModels({ cwd: root }) };
+        }
+        return json(res, 200, { default: DEFAULT_MODEL, models: modelCache.models });
+      }
       if (req.method === 'PUT' && url.pathname === '/api/settings') {
         const settings = await body(req);
         const model = String(settings.model || '').trim();

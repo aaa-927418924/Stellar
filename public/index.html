@@ -120,8 +120,9 @@
     <form class="settings-form" id="settingsForm">
       <div class="settings-heading"><h2 id="settingsTitle">設定</h2><button class="icon-button" id="closeSettings" type="button" aria-label="閉じる">×</button></div>
       <label for="modelInput">OpenCode モデル</label>
-      <input id="modelInput" name="model" type="text" placeholder="既定モデルを使う" autocomplete="off" spellcheck="false">
-      <p>空欄ならOpenCodeの既定モデルを使います。指定する場合は <code>provider/model</code> 形式で入力してください。</p>
+      <select id="modelInput" aria-label="OpenCode モデル"></select>
+      <input id="modelInputFallback" name="model" type="text" placeholder="一覧にない場合は provider/model 形式で入力" autocomplete="off" spellcheck="false">
+      <p>既定はMuse Spark 1.3 Freeです。一覧にない場合は下の入力欄に <code>provider/model</code> 形式で入力してください。</p>
       <button class="save-settings" type="submit">保存</button>
     </form>
   </dialog>

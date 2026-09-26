@@ -1,6 +1,8 @@
 const $ = id => document.getElementById(id);
 const state = { chats: [], current: null, submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
 
+function modelName(value) { return value || 'Muse Spark 1.3 Free（既定）'; }
+
 function showToast(message) {
   const toast = $('toast');
   toast.textContent = message;
@@ -84,7 +86,7 @@ function messageElement(message) {
     for (const entry of message.progress) {
       const item = document.createElement('li');
       item.className = `progress-${entry.type}`;
-      const label = entry.type === 'thought' ? '思考' : entry.type === 'tool' ? 'ツール' : '状態';
+      const label = entry.type === 'thought' ? '思考' : entry.type === 'tool' ? 'ツール' : entry.type === 'step' ? '手順' : '状態';
       item.textContent = `${label} · ${entry.text}`;
       if (entry.detail) {
         const detail = document.createElement('pre');
@@ -110,7 +112,8 @@ function renderMessages() {
   for (const item of items) messages.append(messageElement(item));
   const job = state.current?.job;
   if (job) {
-    const pending = messageElement({ role: 'assistant', text: job.partialAnswer || (job.action === 'ask' ? '回答を考えています…' : '教材を作成しています…'), progress: job.progress, pending: true });
+    const received = job.action !== 'ask' && job.outputChars > 0 ? `（受信 ${(job.outputChars / 1024).toFixed(1)}KB）` : '';
+    const pending = messageElement({ role: 'assistant', text: job.partialAnswer || (job.action === 'ask' ? '回答を考えています…' : `教材を作成しています…${received}`), progress: job.progress, pending: true });
     pending.classList.add('pending');
     const elapsed = document.createElement('div');
     elapsed.className = 'elapsed';
@@ -147,7 +150,7 @@ function renderPreview() {
 
 function render() {
   $('topTitle').textContent = state.current?.title || '新しいチャット';
-  $('modelLabel').textContent = state.model || 'OpenCode 既定モデル';
+  $('modelLabel').textContent = modelName(state.model);
   const selectedAction = $('actionSelect').value;
   $('actionSelect').innerHTML = '';
   const actions = state.current?.lesson ? [['ask', '教材について質問'], ['revise', '教材を更新']] : [['create', '教材を作る']];
@@ -261,16 +264,37 @@ $('closeSidebar').addEventListener('click', () => $('sidebar').classList.remove(
 document.addEventListener('keydown', event => { if (event.key === 'Escape') $('sidebar').classList.remove('open'); });
 for (const button of document.querySelectorAll('[data-example]')) button.addEventListener('click', () => { $('messageInput').value = button.dataset.example; $('messageInput').focus(); });
 for (const button of document.querySelectorAll('.mobile-tab')) button.addEventListener('click', () => { state.mobileTab = button.dataset.tab; renderPreview(); });
-$('settingsButton').addEventListener('click', () => { $('modelInput').value = state.model; $('settingsDialog').showModal(); });
+async function refreshModelOptions() {
+  const select = $('modelInput');
+  select.replaceChildren();
+  const preset = document.createElement('option');
+  preset.value = '';
+  preset.textContent = 'Muse Spark 1.3 Free（既定）';
+  select.append(preset);
+  try {
+    const data = await api('/api/models');
+    for (const id of data.models.filter(id => id !== data.default)) {
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = id;
+      select.append(option);
+    }
+  } catch (error) { showToast(error.message); }
+  const listed = [...select.options].some(option => option.value === state.model);
+  select.value = listed ? state.model : '';
+  $('modelInputFallback').value = listed ? '' : state.model;
+}
+$('settingsButton').addEventListener('click', async () => { await refreshModelOptions(); $('settingsDialog').showModal(); });
 $('closeSettings').addEventListener('click', () => $('settingsDialog').close());
 $('settingsForm').addEventListener('submit', async event => {
   event.preventDefault();
-  const value = $('modelInput').value.trim();
+  const manual = $('modelInputFallback').value.trim();
+  const value = manual || $('modelInput').value;
   if (value && !/^[\w.-]+\/[\w.-]+$/.test(value)) return showToast('モデル名は provider/model 形式で入力してください。');
   try {
     const settings = await api('/api/settings', { method: 'PUT', body: JSON.stringify({ model: value }) });
     state.model = settings.model;
-    $('modelLabel').textContent = value || 'OpenCode 既定モデル';
+    $('modelLabel').textContent = modelName(value);
     $('settingsDialog').close();
   } catch (error) { showToast(error.message); }
 });

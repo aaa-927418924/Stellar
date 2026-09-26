@@ -39,6 +39,14 @@ test('思考履歴は保存できるサイズに制限する', () => {
   assert.ok(chat.job.updatedAt);
 });
 
+test('ステップ開始を手順として記録する', () => {
+  const chat = { job: { progress: [], updatedAt: '' } };
+  assert.deepEqual(progressFromEvent({ type: 'step_start' }, chat), { type: 'step', text: 'ステップ1を開始しました。' });
+  appendProgress(chat, 'step', 'ステップ1を開始しました。');
+  assert.deepEqual(progressFromEvent({ type: 'step_start' }, chat), { type: 'step', text: 'ステップ2を開始しました。' });
+  assert.deepEqual(progressFromEvent({ type: 'step_start' }), { type: 'step', text: 'ステップ1を開始しました。' });
+});
+
 test('ツール結果の詳細は上限付きで残る', () => {
   const chat = { job: { progress: [], updatedAt: '' } };
   appendProgress(chat, 'tool', '$ npm test → exit 0', 'x'.repeat(5000));

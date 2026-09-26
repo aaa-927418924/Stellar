@@ -70,13 +70,17 @@ function summarizeTool(part) {
   return { text, detail: output.slice(0, 1500) };
 }
 
-export function progressFromEvent(event) {
+export function progressFromEvent(event, chat) {
   const kind = event.part?.type || event.type;
   if (kind === 'reasoning' && typeof event.part?.text === 'string' && event.part.text.trim()) {
     return { type: 'thought', text: event.part.text };
   }
   if ((kind === 'tool' || event.type === 'tool_use') && event.part?.tool) {
     return { type: 'tool', ...summarizeTool(event.part) };
+  }
+  if (event.type === 'step_start' || kind === 'step-start') {
+    const step = chat?.job ? chat.job.progress.filter(entry => entry.type === 'step').length + 1 : 1;
+    return { type: 'step', text: `ステップ${step}を開始しました。` };
   }
   return null;
 }

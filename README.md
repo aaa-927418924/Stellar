@@ -23,7 +23,7 @@ cd 'C:\Users\PC_User\Documents\Codex Projects\Study App'
 npm start
 ```
 
-OpenCode の既定モデルを使用します。別のモデルを使う場合は左下の設定から `provider/model` を入力してください。OpenCode 側の認証やモデル設定はこのアプリでは変更しません。
+既定モデルはMuse Spark 1.3 Freeです。左下の設定からモデル一覧で変更できます。一覧にない場合は `provider/model` 形式で手入力もできます。OpenCode 側の認証やモデル設定はこのアプリでは変更しません。
 
 ## 使い方
 
