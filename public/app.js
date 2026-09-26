@@ -13,7 +13,7 @@ function saveOrganizedSeen() {
   } catch { /* ignore */ }
 }
 
-const state = { chats: [], current: null, chatMenuTarget: null, organizedSeen: loadOrganizedSeen(), organizeArmed: [], submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
+const state = { chats: [], current: null, chatMenuTarget: null, organizedSeen: loadOrganizedSeen(), organizeArmed: [], submitting: false, polling: false, attachments: [], mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
 
 function clampPane(value, min, max) { return Math.min(max, Math.max(min, value)); }
 
@@ -142,15 +142,16 @@ function appendMessageText(container, raw) {
   container.append(document.createTextNode(text.slice(offset)));
 }
 
-function thumbnailUrl(message) {
+function thumbnailUrl(message, file) {
   if (!message.image || !state.current) return null;
-  const type = String(message.fileType || '');
-  const name = String(message.file || '');
+  const target = file || {};
+  const type = String(target.type ?? message.fileType ?? '');
+  const name = String(target.name ?? message.file ?? '');
   const known = type.startsWith('image/') ? type : '';
   const extension = (/\.([A-Za-z0-9]{1,10})$/.exec(name) || [])[1]?.toLowerCase() || '';
   const image = known === '' ? ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(extension) : ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(known);
   if (!image) return null;
-  return `/api/chats/${state.current.id}/attachment/${message.id}`;
+  return `/api/chats/${state.current.id}/attachment/${target.id || message.id}`;
 }
 
 function openLightbox(src, alt) {
@@ -186,27 +187,33 @@ function messageElement(message) {
     element.append(label);
   }
   if (message.image) {
-    const chip = document.createElement('span');
-    chip.className = 'message-image';
-    const thumbnail = thumbnailUrl(message);
-    if (thumbnail) {
-      const image = document.createElement('img');
-      image.className = 'message-thumb';
-      image.src = thumbnail;
-      image.alt = message.file || '添付画像';
-      image.loading = 'lazy';
-      image.tabIndex = 0;
-      const open = () => openLightbox(thumbnail, message.file || '添付画像');
-      image.addEventListener('click', open);
-      image.addEventListener('keydown', event => {
-        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
-      });
-      chip.append(image);
+    const files = Array.isArray(message.attachments) && message.attachments.length > 0
+      ? message.attachments
+      : [{ id: message.id, name: message.file, type: message.fileType }];
+    for (const file of files) {
+      const chip = document.createElement('span');
+      chip.className = 'message-image';
+      const thumbnail = thumbnailUrl(message, file);
+      if (thumbnail) {
+        const image = document.createElement('img');
+        image.className = 'message-thumb';
+        image.src = thumbnail;
+        image.alt = file.name || '添付画像';
+        image.loading = 'lazy';
+        image.tabIndex = 0;
+        const open = () => openLightbox(thumbnail, file.name || '添付画像');
+        image.addEventListener('click', open);
+        image.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+        });
+        chip.append(image);
+      }
+      const name = document.createElement('span');
+      name.textContent = file.name || 'ファイルを添付';
+      chip.append(name);
+      element.append(chip);
     }
-    const name = document.createElement('span');
-    name.textContent = message.file || 'ファイルを添付';
-    chip.append(name);
-    element.append(chip, document.createElement('br'));
+    element.append(document.createElement('br'));
   }
   const body = document.createElement('div');
   body.className = 'message-body';
@@ -350,13 +357,43 @@ function newChat() {
 }
 
 function clearImage() {
-  state.image = null;
+  state.attachments = [];
   $('fileInput').value = '';
-  $('attachmentChip').hidden = true;
+  renderAttachmentChips();
+}
+
+function renderAttachmentChips() {
+  const wrap = $('attachmentChips');
+  wrap.replaceChildren();
+  wrap.hidden = state.attachments.length === 0;
+  for (const file of state.attachments) {
+    const chip = document.createElement('span');
+    chip.className = 'attachment-chip';
+    if (file.type.startsWith('image/')) {
+      const thumb = document.createElement('img');
+      thumb.className = 'attachment-thumb';
+      thumb.src = file.data;
+      thumb.alt = `${file.name}のプレビュー`;
+      thumb.addEventListener('click', () => openLightbox(file.data, file.name));
+      chip.append(thumb);
+    }
+    const name = document.createElement('span');
+    name.textContent = file.name;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', `${file.name}の添付を削除`);
+    remove.textContent = '×';
+    remove.addEventListener('click', () => {
+      state.attachments = state.attachments.filter(item => item !== file);
+      renderAttachmentChips();
+    });
+    chip.append(name, remove);
+  }
 }
 
 async function readFile(file) {
   if (!file) return;
+  if (state.attachments.length >= 5) return showToast('添付は5件までにしてください。');
   if (file.size > 8_000_000) return showToast('ファイルは8MB以下にしてください。');
   const data = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -364,15 +401,9 @@ async function readFile(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-  state.image = { name: file.name, type: file.type || 'application/octet-stream', data };
-  $('attachmentName').textContent = file.name;
-  const thumb = $('attachmentThumb');
-  if ((file.type || '').startsWith('image/')) {
-    thumb.src = data;
-    thumb.hidden = false;
-    thumb.onclick = () => openLightbox(data, file.name);
-  } else thumb.hidden = true;
-  $('attachmentChip').hidden = false;
+  state.attachments.push({ name: file.name, type: file.type || 'application/octet-stream', data });
+  $('fileInput').value = '';
+  renderAttachmentChips();
 }
 
 async function submit(event) {
@@ -381,7 +412,7 @@ async function submit(event) {
   const text = $('messageInput').value.trim();
   if (!text) return $('messageInput').focus();
   const action = $('actionSelect').value;
-  const image = state.image;
+  const images = state.attachments;
   state.submitting = true;
   render();
   try {
@@ -389,7 +420,7 @@ async function submit(event) {
       state.current = await api('/api/chats', { method: 'POST', body: '{}' });
       await loadChats();
     }
-    state.current = await api(`/api/chats/${state.current.id}/send`, { method: 'POST', body: JSON.stringify({ text, action, model: state.model, image }) });
+    state.current = await api(`/api/chats/${state.current.id}/send`, { method: 'POST', body: JSON.stringify({ text, action, model: state.model, images }) });
     $('messageInput').value = '';
     clearImage();
     await loadChats();
@@ -428,8 +459,15 @@ $('messageInput').addEventListener('keydown', event => {
   }
 });
 $('newChat').addEventListener('click', newChat);
-$('fileInput').addEventListener('change', event => readFile(event.target.files?.[0]).catch(error => showToast(error.message)));
-$('removeAttachment').addEventListener('click', clearImage);
+$('fileInput').addEventListener('change', event => {
+  const files = [...(event.target.files || [])];
+  (async () => {
+    for (const file of files) {
+      try { await readFile(file); }
+      catch (error) { showToast(error.message); }
+    }
+  })().catch(error => showToast(error.message));
+});
 $('previewToggle').addEventListener('click', () => { state.previewOpen = !state.previewOpen; renderPreview(); });
 $('reloadPreview').addEventListener('click', () => { $('lessonFrame').src = `${lessonUrl()}?v=${Date.now()}`; });
 $('menuButton').addEventListener('click', () => $('sidebar').classList.add('open'));

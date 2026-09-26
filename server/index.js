@@ -20,7 +20,8 @@ const store = new Store(dataRoot);
 const instancePath = path.join(store.root, 'instance.json');
 const launchSecret = randomBytes(32).toString('hex');
 const active = new Map();
-const MAX_BODY = 12_000_000;
+const MAX_BODY = 60_000_000;
+const MAX_ATTACHMENTS = 5;
 let modelCache = { at: 0, models: [] };
 let opencodeStatus = { ok: false, path: null };
 
@@ -84,12 +85,13 @@ export function attachmentFromPayload(payload) {
   if (bytes.length === 0 || bytes.length > 8_000_000) throw Object.assign(new Error('ファイルは8MB以下にしてください。'), { status: 413 });
   const name = String(payload.name || 'file').slice(0, 120);
   const extension = ((/\.([A-Za-z0-9]{1,10})$/.exec(name) || [])[1] || 'bin').toLowerCase();
-  return { bytes, extension, name };
+  return { bytes, extension, name, type: String(payload.type || '') };
 }
 
-async function runJob({ chat, text, action, model, attachment, lesson, controller }) {
+async function runJob({ chat, text, action, model, attachments, lesson, controller }) {
   let promptFile;
-  const attachmentFile = attachment ? path.join(store.attachmentsDir, store.attachmentName(chat.id, attachment.messageId, attachment.extension)) : null;
+  const attachmentFiles = (attachments || []).map(item =>
+    path.join(store.attachmentsDir, store.attachmentName(chat.id, item.messageId, item.extension)));
   let writes = Promise.resolve();
   const persist = () => { writes = writes.catch(() => {}).then(() => store.save(chat)); return writes; };
   const record = (type, value) => { appendProgress(chat, type, value); void persist().catch(error => console.error('進行履歴の保存に失敗:', error)); };
@@ -98,7 +100,7 @@ async function runJob({ chat, text, action, model, attachment, lesson, controlle
     promptFile = path.join(store.tmpDir, `${randomUUID()}.txt`);
     await writeFile(promptFile, prompt, 'utf8');
     record('status', 'OpenCodeを起動しました。');
-    const result = await runOpenCode({ promptFile, attachment: attachmentFile, model: model || DEFAULT_MODEL, cwd: root, signal: controller.signal,
+    const result = await runOpenCode({ promptFile, attachments: attachmentFiles, model: model || DEFAULT_MODEL, cwd: root, signal: controller.signal,
       onText: fragment => {
         if ((action === 'ask' || action === 'question' || action === 'organize') && chat.job) {
           chat.job.partialAnswer = (chat.job.partialAnswer + fragment).slice(0, 80000);
@@ -160,14 +162,21 @@ async function send(req, res, id) {
   if ((action === 'ask' || action === 'revise') && !chat.lesson) return fail(res, 400, '先に教材を作成してください。');
   if (action === 'create' && chat.mode === 'question') return fail(res, 400, '質問用チャットでは教材を作れません。');
   if (model && (!/^[\w.-]+\/[\w.-]+$/.test(model) || model.length > 120)) return fail(res, 400, 'モデル名は provider/model の形式で入力してください。');
-  const attachment = attachmentFromPayload(payload.image);
+  const rawAttachments = [];
+  if (payload.image) rawAttachments.push(payload.image);
+  if (Array.isArray(payload.images)) rawAttachments.push(...payload.images);
+  if (rawAttachments.length > MAX_ATTACHMENTS) return fail(res, 400, '添付は5件までにしてください。');
+  const attachments = rawAttachments.map(item => attachmentFromPayload(item));
   const lesson = chat.lesson ? await store.lesson(id) : null;
   const messageId = randomUUID();
-  if (attachment) {
-    await store.saveAttachment(id, messageId, attachment.extension, attachment.bytes);
-    attachment.messageId = messageId;
+  const files = [];
+  for (const attachment of attachments) {
+    const fileId = randomUUID();
+    await store.saveAttachment(id, fileId, attachment.extension, attachment.bytes);
+    files.push({ id: fileId, name: attachment.name, type: String(attachment.type || ''), ext: attachment.extension });
+    attachment.messageId = fileId;
   }
-  chat.messages.push({ id: messageId, role: 'user', text, action, image: !!attachment, file: attachment ? attachment.name : null, fileType: attachment ? String(payload.image.type || '') : null, at: new Date().toISOString() });
+  chat.messages.push({ id: messageId, role: 'user', text, action, image: files.length > 0, file: files[0]?.name || null, fileType: files[0]?.type || null, attachments: files, at: new Date().toISOString() });
   if (chat.messages.length === 1) {
     chat.title = text.slice(0, 36);
     if (!chat.mode) chat.mode = action === 'question' ? 'question' : 'lesson';
@@ -177,7 +186,7 @@ async function send(req, res, id) {
   await store.save(chat);
   const controller = new AbortController();
   active.set(id, controller);
-  void runJob({ chat, text, action, model, attachment, lesson, controller }).catch(error => console.error('生成ジョブが停止しました:', error));
+  void runJob({ chat, text, action, model, attachments, lesson, controller }).catch(error => console.error('生成ジョブが停止しました:', error));
   return json(res, 202, chat);
 }
 
@@ -258,10 +267,23 @@ export async function createServer() {
       const attachmentMatch = /^\/api\/chats\/([0-9a-f-]{36})\/attachment\/([0-9a-f-]{36})$/.exec(url.pathname);
       if (req.method === 'GET' && attachmentMatch) {
         const chat = await store.get(attachmentMatch[1]);
-        const message = chat?.messages.find(item => item.id === attachmentMatch[2]);
-        const extension = thumbnailExtension(message);
+        let extension = null;
+        if (chat) {
+          for (const item of chat.messages) {
+            const found = (item.attachments || []).find(file => file.id === attachmentMatch[2]);
+            if (found && /^[A-Za-z0-9]{1,10}$/.test(found.ext || '')) {
+              extension = found.ext.toLowerCase();
+              break;
+            }
+          }
+          if (!extension) {
+            const legacy = chat.messages.find(item => item.id === attachmentMatch[2]);
+            extension = thumbnailExtension(legacy);
+          }
+        }
         const imageTypes = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
-        const bytes = extension ? await store.attachment(attachmentMatch[1], attachmentMatch[2], extension) : null;
+        if (!extension || !imageTypes[extension]) return fail(res, 404, '添付ファイルが見つかりません。');
+        const bytes = await store.attachment(attachmentMatch[1], attachmentMatch[2], extension);
         if (!bytes) return fail(res, 404, '添付ファイルが見つかりません。');
         res.writeHead(200, { 'Content-Type': imageTypes[extension], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         return res.end(bytes);

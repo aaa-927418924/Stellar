@@ -71,7 +71,7 @@
           </div>
 
           <div class="composer-wrap">
-            <div class="attachment-chip" id="attachmentChip" hidden><img class="attachment-thumb" id="attachmentThumb" alt="添付画像のプレビュー" hidden><span id="attachmentName"></span><button id="removeAttachment" type="button" aria-label="添付を削除">×</button></div>
+            <div class="attachment-chips" id="attachmentChips" hidden></div>
             <form class="composer" id="composer">
               <label class="sr-only" for="messageInput">学びたいことや質問</label>
               <textarea id="messageInput" rows="2" placeholder="学びたいことを入力して…" maxlength="5000" required></textarea>
@@ -80,7 +80,7 @@
                   <label class="attach-button" for="fileInput" title="ファイルを添付" aria-label="ファイルを添付">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                   </label>
-                  <input id="fileInput" type="file" hidden>
+                  <input id="fileInput" type="file" multiple hidden>
                   <label class="sr-only" for="actionSelect">送信方法</label>
                   <select id="actionSelect" aria-label="送信方法">
                     <option value="create">教材を作る</option>

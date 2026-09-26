@@ -66,12 +66,14 @@ export async function listModels({ cwd, timeoutMs = 20000 } = {}) {
   return models;
 }
 
-export async function runOpenCode({ promptFile, model, attachment, onText, onEvent, signal, cwd }) {
+export async function runOpenCode({ promptFile, attachments, attachment, model, onText, onEvent, signal, cwd }) {
   const args = ['run', '--pure', '--format', 'json', '--thinking', '--agent', 'study', '--dir', cwd];
   if (model) args.push('--model', model);
   args.push('添付した指示テキストを読み、その依頼を実行してください。');
   args.push('--file', promptFile);
-  if (attachment) args.push('--file', attachment);
+  const files = [...(attachments || [])];
+  if (attachment) files.push(attachment);
+  for (const file of files) args.push('--file', file);
   const child = spawn(command(), args, {
     cwd,
     windowsHide: true,
