@@ -155,7 +155,7 @@ function messageElement(message) {
   if (message.image) {
     const chip = document.createElement('span');
     chip.className = 'message-image';
-    chip.textContent = '画像を添付';
+    chip.textContent = message.file || 'ファイルを添付';
     element.append(chip, document.createElement('br'));
   }
   const body = document.createElement('div');
@@ -301,21 +301,20 @@ function newChat() {
 
 function clearImage() {
   state.image = null;
-  $('imageInput').value = '';
+  $('fileInput').value = '';
   $('attachmentChip').hidden = true;
 }
 
-async function readImage(file) {
+async function readFile(file) {
   if (!file) return;
-  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) return showToast('PNG、JPEG、WebP、GIF画像を選んでください。');
-  if (file.size > 8_000_000) return showToast('画像は8MB以下にしてください。');
+  if (file.size > 8_000_000) return showToast('ファイルは8MB以下にしてください。');
   const data = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-  state.image = { name: file.name, type: file.type, data };
+  state.image = { name: file.name, type: file.type || 'application/octet-stream', data };
   $('attachmentName').textContent = file.name;
   $('attachmentChip').hidden = false;
 }
@@ -373,7 +372,7 @@ $('messageInput').addEventListener('keydown', event => {
   }
 });
 $('newChat').addEventListener('click', newChat);
-$('imageInput').addEventListener('change', event => readImage(event.target.files?.[0]).catch(error => showToast(error.message)));
+$('fileInput').addEventListener('change', event => readFile(event.target.files?.[0]).catch(error => showToast(error.message)));
 $('removeAttachment').addEventListener('click', clearImage);
 $('previewToggle').addEventListener('click', () => { state.previewOpen = !state.previewOpen; renderPreview(); });
 $('reloadPreview').addEventListener('click', () => { $('lessonFrame').src = `${lessonUrl()}?v=${Date.now()}`; });

@@ -67,15 +67,15 @@ function summary(chat) {
   return { id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, lesson: chat.lesson, mode: chat.mode || null, messageCount: chat.messages.length, jobStatus: chat.job?.status || null, lastMessageFailed: !!chat.messages.at(-1)?.failed };
 }
 
-function attachmentFromPayload(payload) {
+export function attachmentFromPayload(payload) {
   if (!payload) return null;
-  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(payload.type)) throw Object.assign(new Error('PNG、JPEG、WebP、GIF画像だけ添付できます。'), { status: 400 });
-  const match = /^data:image\/(?:png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$/.exec(payload.data || '');
-  if (!match) throw Object.assign(new Error('画像を読み取れませんでした。'), { status: 400 });
-  const bytes = Buffer.from(match[1], 'base64');
-  if (bytes.length > 8_000_000) throw Object.assign(new Error('画像は8MB以下にしてください。'), { status: 413 });
-  const extension = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[payload.type];
-  return { bytes, extension };
+  const match = /^data:([^;,]*);base64,([A-Za-z0-9+/=]+)$/.exec(payload.data || '');
+  if (!match) throw Object.assign(new Error('ファイルを読み取れませんでした。'), { status: 400 });
+  const bytes = Buffer.from(match[2], 'base64');
+  if (bytes.length === 0 || bytes.length > 8_000_000) throw Object.assign(new Error('ファイルは8MB以下にしてください。'), { status: 413 });
+  const name = String(payload.name || 'file').slice(0, 120);
+  const extension = (/\.([A-Za-z0-9]{1,10})$/.exec(name) || [])[1] || 'bin';
+  return { bytes, extension, name };
 }
 
 async function runJob({ chat, text, action, model, attachment, lesson, controller }) {
@@ -157,7 +157,7 @@ async function send(req, res, id) {
   if (model && (!/^[\w.-]+\/[\w.-]+$/.test(model) || model.length > 120)) return fail(res, 400, 'モデル名は provider/model の形式で入力してください。');
   const attachment = attachmentFromPayload(payload.image);
   const lesson = chat.lesson ? await store.lesson(id) : null;
-  chat.messages.push({ id: randomUUID(), role: 'user', text, action, image: !!attachment, at: new Date().toISOString() });
+  chat.messages.push({ id: randomUUID(), role: 'user', text, action, image: !!attachment, file: attachment ? attachment.name : null, at: new Date().toISOString() });
   if (chat.messages.length === 1) {
     chat.title = text.slice(0, 36);
     if (!chat.mode) chat.mode = action === 'question' ? 'question' : 'lesson';
