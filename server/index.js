@@ -18,6 +18,8 @@ const dataRoot = packaged && process.env.APPDATA
   : path.join(root, 'data');
 const store = new Store(dataRoot);
 const instancePath = path.join(store.root, 'instance.json');
+let appVersion = '';
+try { appVersion = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version || ''; } catch { /* ignore */ }
 const launchSecret = randomBytes(32).toString('hex');
 const active = new Map();
 const MAX_BODY = 60_000_000;
@@ -218,7 +220,7 @@ export async function createServer() {
       if (req.method === 'GET' && url.pathname === '/api/chats') return json(res, 200, (await store.list()).map(summary));
       if (req.method === 'POST' && url.pathname === '/api/chats') return json(res, 201, await store.create());
       if (req.method === 'GET' && url.pathname === '/api/settings') {
-        return json(res, 200, { ...(await store.settings()), opencodeOk: opencodeStatus.ok, opencodePath: opencodeStatus.path });
+        return json(res, 200, { ...(await store.settings()), opencodeOk: opencodeStatus.ok, opencodePath: opencodeStatus.path, version: appVersion });
       }
       if (req.method === 'GET' && url.pathname === '/api/models') {
         if (Date.now() - modelCache.at > 600_000) {

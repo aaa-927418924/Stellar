@@ -190,6 +190,8 @@ function messageElement(message) {
     const files = Array.isArray(message.attachments) && message.attachments.length > 0
       ? message.attachments
       : [{ id: message.id, name: message.file, type: message.fileType }];
+    const wrap = document.createElement('div');
+    wrap.className = 'message-files';
     for (const file of files) {
       const chip = document.createElement('span');
       chip.className = 'message-image';
@@ -209,11 +211,12 @@ function messageElement(message) {
         chip.append(image);
       }
       const name = document.createElement('span');
+      name.className = 'message-filename';
       name.textContent = file.name || 'ファイルを添付';
       chip.append(name);
-      element.append(chip);
+      wrap.append(chip);
     }
-    element.append(document.createElement('br'));
+    element.append(wrap, document.createElement('br'));
   }
   const body = document.createElement('div');
   body.className = 'message-body';
@@ -599,6 +602,7 @@ async function poll() {
 
 Promise.all([loadChats(), api('/api/settings')]).then(async ([, settings]) => {
   state.model = settings.model || '';
+  $('appVersion').textContent = settings.version ? `バージョン ${settings.version}` : '';
   if (!settings.opencodeOk) $('opencodeDialog').showModal();
   const running = state.chats.find(chat => chat.jobStatus === 'running');
   if (running) state.current = await api(`/api/chats/${running.id}`);
