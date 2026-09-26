@@ -45,3 +45,13 @@ test('質問の指示には現在の教材が含まれる', () => {
   assert.doesNotMatch(prompt, /<style>/);
   assert.match(prompt, /傾きは？/);
 });
+
+test('質問専用と整理用の指示が作れる', () => {
+  const chat = { messages: [{ role: 'user', text: '分数が苦手' }] };
+  const question = buildPrompt({ chat, text: '通分とは？', action: 'question', lesson: null });
+  assert.match(question, /通分とは？/);
+  assert.match(question, /分数が苦手/);
+  const organize = buildPrompt({ chat, text: '教材用のプロンプトを作って', action: 'organize', lesson: null });
+  assert.match(organize, /1～2行/);
+  assert.match(organize, /分数が苦手/);
+});

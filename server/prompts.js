@@ -19,6 +19,9 @@ function history(chat) {
 }
 
 export function buildPrompt({ chat, text, action, lesson }) {
+  if (action === 'organize') {
+    return `あなたは学習相談の整理者です。これまでの会話から、学習したい内容、対象レベル、重点を読み取ってください。別チャットで教材を作るための依頼文だけを、日本語1～2行で出力してください。前置き、解説、箇条書きは不要です。\n\n会話:\n${history(chat) || 'なし'}`;
+  }
   if (action === 'create' || action === 'revise') {
     return `${STUDY_RULES}\n\n${action === 'revise' ? '現在の教材HTMLを改善し、完全な新しいHTMLを返してください。変更指示以外の有効な内容も維持してください。' : '新しい教材HTMLを作成してください。'}\n\nこれまでの会話:\n${history(chat) || 'なし'}\n\n${lesson ? `現在の教材HTML:\n${lesson.slice(0, 55000)}\n\n` : ''}今回の依頼:\n${text}`;
   }

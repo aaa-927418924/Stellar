@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-const state = { chats: [], current: null, submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
+const state = { chats: [], current: null, submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true, organizedSeen: null };
 
 function clampPane(value, min, max) { return Math.min(max, Math.max(min, value)); }
 
@@ -165,8 +165,10 @@ function renderMessages() {
   for (const item of items) messages.append(messageElement(item));
   const job = state.current?.job;
   if (job) {
-    const received = job.action !== 'ask' && job.outputChars > 0 ? `（受信 ${(job.outputChars / 1024).toFixed(1)}KB）` : '';
-    const pending = messageElement({ role: 'assistant', text: job.partialAnswer || (job.action === 'ask' ? '回答を考えています…' : `教材を作成しています…${received}`), progress: job.progress, pending: true });
+    const askLike = job.action === 'ask' || job.action === 'question' || job.action === 'organize';
+    const busyText = job.action === 'organize' ? 'プロンプトを考えています…' : askLike ? '回答を考えています…' : '教材を作成しています…';
+    const received = !askLike && job.outputChars > 0 ? `（受信 ${(job.outputChars / 1024).toFixed(1)}KB）` : '';
+    const pending = messageElement({ role: 'assistant', text: job.partialAnswer || `${busyText}${received}`, progress: job.progress, pending: true });
     pending.classList.add('pending');
     const elapsed = document.createElement('div');
     elapsed.className = 'elapsed';
@@ -175,6 +177,12 @@ function renderMessages() {
     messages.append(pending);
   }
   if (shouldScroll && (items.length || job)) pane.scrollTop = pane.scrollHeight;
+  const last = items.at(-1);
+  if (last?.organizePrompt && state.organizedSeen !== last.id) {
+    state.organizedSeen = last.id;
+    if (!$('messageInput').value.trim()) $('messageInput').value = last.text;
+    showToast('教材用プロンプトを用意しました。使う場合は別チャットへ貼り付けてください。');
+  }
 }
 
 function lessonUrl(download = false) {
@@ -205,14 +213,21 @@ function render() {
   $('topTitle').textContent = state.current?.title || '新しいチャット';
   const selectedAction = $('actionSelect').value;
   $('actionSelect').innerHTML = '';
-  const actions = state.current?.lesson ? [['ask', '教材について質問'], ['revise', '教材を更新']] : [['create', '教材を作る']];
+  const questionMode = state.current?.mode === 'question';
+  const hasMessages = (state.current?.messages.length || 0) > 0;
+  let actions;
+  if (questionMode) actions = [['question', '質問する']];
+  else if (state.current?.lesson) actions = [['ask', '教材について質問'], ['revise', '教材を更新']];
+  else if (hasMessages) actions = [['create', '教材を作る']];
+  else actions = [['create', '教材を作る'], ['question', '質問する']];
   for (const [value, label] of actions) $('actionSelect').add(new Option(label, value));
   if (actions.some(([value]) => value === selectedAction)) $('actionSelect').value = selectedAction;
-  $('messageInput').placeholder = state.current?.lesson ? '教材について質問して…' : '学びたいことを入力して…';
+  $('messageInput').placeholder = questionMode ? '質問を入力して…' : state.current?.lesson ? '教材について質問して…' : '学びたいことを入力して…';
   renderChatList();
   renderMessages();
   renderPreview();
   const busy = !!state.current?.job || state.submitting;
+  $('organizeButton').hidden = state.current?.mode !== 'question' || busy;
   $('sendButton').disabled = busy;
   $('sendButton').hidden = busy;
   $('stopButton').hidden = !state.current?.job;
@@ -222,6 +237,7 @@ function render() {
 
 async function openChat(id) {
   state.current = await api(`/api/chats/${id}`);
+  state.organizedSeen = null;
   state.mobileTab = 'chat';
   state.previewOpen = true;
   state.progressOpen = true;
@@ -231,6 +247,7 @@ async function openChat(id) {
 
 function newChat() {
   state.current = null;
+  state.organizedSeen = null;
   document.title = 'Study App';
   state.mobileTab = 'chat';
   state.previewOpen = true;
@@ -295,6 +312,14 @@ async function submit(event) {
 }
 
 $('composer').addEventListener('submit', submit);
+$('organizeButton').addEventListener('click', async () => {
+  if (!state.current || state.current.mode !== 'question' || state.current.job || state.submitting) return;
+  try {
+    state.current = await api(`/api/chats/${state.current.id}/send`, { method: 'POST', body: JSON.stringify({ text: '教材用のプロンプトを作って', action: 'organize', model: state.model }) });
+    await loadChats();
+    render();
+  } catch (error) { showToast(error.message); }
+});
 $('stopButton').addEventListener('click', async () => {
   if (!state.current?.job) return;
   try { await api(`/api/chats/${state.current.id}/cancel`, { method: 'POST', body: '{}' }); showToast('停止を依頼しました。'); }

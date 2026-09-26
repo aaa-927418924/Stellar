@@ -64,7 +64,7 @@ async function staticFile(res, name, type) {
 }
 
 function summary(chat) {
-  return { id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, lesson: chat.lesson, messageCount: chat.messages.length, jobStatus: chat.job?.status || null, lastMessageFailed: !!chat.messages.at(-1)?.failed };
+  return { id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, lesson: chat.lesson, mode: chat.mode || null, messageCount: chat.messages.length, jobStatus: chat.job?.status || null, lastMessageFailed: !!chat.messages.at(-1)?.failed };
 }
 
 function attachmentFromPayload(payload) {
@@ -95,7 +95,7 @@ async function runJob({ chat, text, action, model, attachment, lesson, controlle
     record('status', 'OpenCodeを起動しました。');
     const result = await runOpenCode({ promptFile, attachment: imageFile, model: model || DEFAULT_MODEL, cwd: root, signal: controller.signal,
       onText: fragment => {
-        if (action === 'ask' && chat.job) {
+        if ((action === 'ask' || action === 'question' || action === 'organize') && chat.job) {
           chat.job.partialAnswer = (chat.job.partialAnswer + fragment).slice(0, 80000);
           chat.job.updatedAt = new Date().toISOString();
           void persist().catch(error => console.error('回答途中の保存に失敗:', error));
@@ -112,15 +112,19 @@ async function runJob({ chat, text, action, model, attachment, lesson, controlle
     });
     await writes;
     let response = result.trim();
-    if (action !== 'ask') {
+    let organizePrompt = false;
+    if (action === 'create' || action === 'revise') {
       const html = extractHtml(result);
       await store.saveLesson(chat.id, html);
       chat.lesson = true;
       chat.lessonUpdatedAt = new Date().toISOString();
       response = action === 'create' ? '教材を作成しました。右側のプレビューで学習・問題モードを試せます。' : '教材を更新しました。右側のプレビューに反映しました。';
+    } else if (action === 'organize') {
+      response = response.slice(0, 500);
+      organizePrompt = true;
     }
     appendProgress(chat, 'status', '完了しました。');
-    chat.messages.push({ id: randomUUID(), role: 'assistant', text: response, progress: chat.job.progress, at: new Date().toISOString() });
+    chat.messages.push({ id: randomUUID(), role: 'assistant', text: response, ...(organizePrompt ? { organizePrompt: true } : {}), progress: chat.job.progress, at: new Date().toISOString() });
     chat.job = null;
     await store.save(chat);
   } catch (error) {
@@ -145,13 +149,19 @@ async function send(req, res, id) {
   const action = payload.action;
   const model = String(payload.model || '').trim();
   if (!text || text.length > 5000) return fail(res, 400, 'メッセージは1～5000文字で入力してください。');
-  if (!['create', 'ask', 'revise'].includes(action)) return fail(res, 400, '操作を選択してください。');
-  if (action !== 'create' && !chat.lesson) return fail(res, 400, '先に教材を作成してください。');
+  if (!['create', 'ask', 'revise', 'question', 'organize'].includes(action)) return fail(res, 400, '操作を選択してください。');
+  if (action === 'question' && chat.messages.length > 0 && chat.mode !== 'question') return fail(res, 400, 'この操作は新規チャットでのみ選べます。');
+  if (action === 'organize' && chat.mode !== 'question') return fail(res, 400, 'この操作は質問用チャットでのみ使えます。');
+  if ((action === 'ask' || action === 'revise') && !chat.lesson) return fail(res, 400, '先に教材を作成してください。');
+  if (action === 'create' && chat.mode === 'question') return fail(res, 400, '質問用チャットでは教材を作れません。');
   if (model && (!/^[\w.-]+\/[\w.-]+$/.test(model) || model.length > 120)) return fail(res, 400, 'モデル名は provider/model の形式で入力してください。');
   const attachment = attachmentFromPayload(payload.image);
   const lesson = chat.lesson ? await store.lesson(id) : null;
   chat.messages.push({ id: randomUUID(), role: 'user', text, action, image: !!attachment, at: new Date().toISOString() });
-  if (chat.messages.length === 1) chat.title = text.slice(0, 36);
+  if (chat.messages.length === 1) {
+    chat.title = text.slice(0, 36);
+    if (!chat.mode) chat.mode = action === 'question' ? 'question' : 'lesson';
+  }
   const now = new Date().toISOString();
   chat.job = { id: randomUUID(), status: 'running', action, model, startedAt: now, updatedAt: now, outputChars: 0, partialAnswer: '', progress: [{ type: 'status', text: '生成を開始しました。', at: now }] };
   await store.save(chat);
