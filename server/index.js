@@ -124,8 +124,7 @@ async function runJob({ chat, text, action, model, attachment, lesson, controlle
       organizePrompt = true;
     }
     appendProgress(chat, 'status', '完了しました。');
-    const answer = action === 'ask' || action === 'question' || action === 'organize';
-    chat.messages.push({ id: randomUUID(), role: 'assistant', text: response, ...(organizePrompt ? { organizePrompt: true } : {}), ...(answer ? { answer: true } : {}), progress: chat.job.progress, at: new Date().toISOString() });
+    chat.messages.push({ id: randomUUID(), role: 'assistant', text: response, ...(organizePrompt ? { organizePrompt: true } : {}), progress: chat.job.progress, at: new Date().toISOString() });
     chat.job = null;
     await store.save(chat);
   } catch (error) {

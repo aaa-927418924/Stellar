@@ -163,7 +163,7 @@ function messageElement(message) {
   if (message.role === 'assistant') renderMarkdown(body, message.text);
   else appendMessageText(body, message.text);
   element.append(body);
-  if (message.progress?.length && !message.answer) {
+  if (message.pending && message.progress?.length) {
     const details = document.createElement('details');
     details.className = 'progress-log';
     details.open = !!message.pending && state.progressOpen;
