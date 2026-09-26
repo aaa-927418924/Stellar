@@ -142,6 +142,39 @@ function appendMessageText(container, raw) {
   container.append(document.createTextNode(text.slice(offset)));
 }
 
+function thumbnailUrl(message) {
+  if (!message.image || !state.current) return null;
+  const type = String(message.fileType || '');
+  const name = String(message.file || '');
+  const known = type.startsWith('image/') ? type : '';
+  const extension = (/\.([A-Za-z0-9]{1,10})$/.exec(name) || [])[1]?.toLowerCase() || '';
+  const image = known === '' ? ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(extension) : ['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(known);
+  if (!image) return null;
+  return `/api/chats/${state.current.id}/attachment/${message.id}`;
+}
+
+function openLightbox(src, alt) {
+  closeLightbox();
+  const overlay = document.createElement('div');
+  overlay.className = 'lightbox';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-label', alt);
+  const image = document.createElement('img');
+  image.src = src;
+  image.alt = alt;
+  overlay.append(image);
+  overlay.addEventListener('click', closeLightbox);
+  document.body.append(overlay);
+  document.body.classList.add('lightbox-open');
+  overlay.tabIndex = -1;
+  overlay.focus();
+}
+
+function closeLightbox() {
+  document.querySelector('.lightbox')?.remove();
+  document.body.classList.remove('lightbox-open');
+}
+
 function messageElement(message) {
   const element = document.createElement('div');
   element.className = `message ${message.role}`;
@@ -155,7 +188,24 @@ function messageElement(message) {
   if (message.image) {
     const chip = document.createElement('span');
     chip.className = 'message-image';
-    chip.textContent = message.file || 'ファイルを添付';
+    const thumbnail = thumbnailUrl(message);
+    if (thumbnail) {
+      const image = document.createElement('img');
+      image.className = 'message-thumb';
+      image.src = thumbnail;
+      image.alt = message.file || '添付画像';
+      image.loading = 'lazy';
+      image.tabIndex = 0;
+      const open = () => openLightbox(thumbnail, message.file || '添付画像');
+      image.addEventListener('click', open);
+      image.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+      });
+      chip.append(image);
+    }
+    const name = document.createElement('span');
+    name.textContent = message.file || 'ファイルを添付';
+    chip.append(name);
     element.append(chip, document.createElement('br'));
   }
   const body = document.createElement('div');
@@ -395,7 +445,7 @@ document.addEventListener('click', event => {
   if (!event.target.closest('#chatMenu')) closeChatMenu();
 });
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') { closeChatMenu(); $('sidebar').classList.remove('open'); }
+  if (event.key === 'Escape') { closeLightbox(); closeChatMenu(); $('sidebar').classList.remove('open'); }
 });
 for (const button of document.querySelectorAll('[data-example]')) button.addEventListener('click', () => { $('messageInput').value = button.dataset.example; $('messageInput').focus(); });
 for (const button of document.querySelectorAll('.mobile-tab')) button.addEventListener('click', () => { state.mobileTab = button.dataset.tab; renderPreview(); });

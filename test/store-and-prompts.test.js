@@ -46,6 +46,24 @@ test('質問の指示には現在の教材が含まれる', () => {
   assert.match(prompt, /傾きは？/);
 });
 
+test('添付ファイルをバイナリのまま保存・取得・削除する', async () => {
+  const { randomUUID } = await import('node:crypto');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'study-app-attach-'));
+  try {
+    const store = new Store(root);
+    await store.init();
+    const chatId = randomUUID();
+    const messageId = randomUUID();
+    const bytes = Buffer.from([0, 1, 2, 250, 251, 252, 253, 254, 255]);
+    await store.saveAttachment(chatId, messageId, 'png', bytes);
+    assert.deepEqual(await store.attachment(chatId, messageId, 'png'), bytes);
+    assert.equal(await store.attachment(chatId, messageId, 'jpg'), null);
+    assert.throws(() => store.attachmentName('../x', messageId, 'png'), /不正/);
+    await store.delete(chatId);
+    assert.equal(await store.attachment(chatId, messageId, 'png'), null);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test('質問専用と整理用の指示が作れる', () => {
   const chat = { messages: [{ role: 'user', text: '分数が苦手' }] };
   const question = buildPrompt({ chat, text: '通分とは？', action: 'question', lesson: null });

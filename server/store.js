@@ -23,10 +23,11 @@ export class Store {
     this.chatsDir = path.join(root, 'chats');
     this.lessonsDir = path.join(root, 'lessons');
     this.tmpDir = path.join(root, 'tmp');
+    this.attachmentsDir = path.join(root, 'attachments');
   }
 
   async init() {
-    await Promise.all([this.chatsDir, this.lessonsDir, this.tmpDir].map(dir => mkdir(dir, { recursive: true })));
+    await Promise.all([this.chatsDir, this.lessonsDir, this.tmpDir, this.attachmentsDir].map(dir => mkdir(dir, { recursive: true })));
   }
 
   chatPath(id) {
@@ -85,6 +86,37 @@ export class Store {
     this.lessonPath(id);
     await unlink(this.chatPath(id)).catch(error => { if (error.code !== 'ENOENT') throw error; });
     await unlink(this.lessonPath(id)).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    const prefix = `${id}-`;
+    const files = await readdir(this.attachmentsDir).catch(() => []);
+    await Promise.all(files.filter(name => name.startsWith(prefix)).map(name => unlink(path.join(this.attachmentsDir, name)).catch(() => {})));
+  }
+
+  attachmentName(chatId, messageId, extension) {
+    if (!idPattern.test(chatId) || !idPattern.test(messageId) || !/^[A-Za-z0-9]{1,10}$/.test(extension || '')) {
+      throw new Error('添付ファイルの指定が不正です。');
+    }
+    return `${chatId}-${messageId}.${extension}`;
+  }
+
+  async saveAttachment(chatId, messageId, extension, bytes) {
+    const target = path.join(this.attachmentsDir, this.attachmentName(chatId, messageId, extension));
+    const temporary = `${target}.${randomUUID()}.tmp`;
+    await writeFile(temporary, bytes);
+    try {
+      await rename(temporary, target);
+    } catch (error) {
+      if (process.platform !== 'win32' || !['EPERM', 'EACCES'].includes(error.code)) throw error;
+      try { await writeFile(target, bytes); }
+      finally { await unlink(temporary).catch(() => {}); }
+    }
+  }
+
+  async attachment(chatId, messageId, extension) {
+    try { return await readFile(path.join(this.attachmentsDir, this.attachmentName(chatId, messageId, extension))); }
+    catch (error) {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    }
   }
 
   async settings() {

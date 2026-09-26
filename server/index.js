@@ -29,6 +29,15 @@ function json(res, status, value) {
   res.end(JSON.stringify(value));
 }
 
+function thumbnailExtension(message) {
+  if (!message?.image) return null;
+  const fromType = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[message.fileType];
+  if (fromType) return fromType;
+  const fromName = /\.([A-Za-z0-9]{1,10})$/.exec(message.file || '');
+  const extension = (fromName || [])[1]?.toLowerCase();
+  return ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(extension) ? extension : null;
+}
+
 function fail(res, status, message) { json(res, status, { error: message }); }
 
 async function body(req) {
@@ -74,13 +83,13 @@ export function attachmentFromPayload(payload) {
   const bytes = Buffer.from(match[2], 'base64');
   if (bytes.length === 0 || bytes.length > 8_000_000) throw Object.assign(new Error('ファイルは8MB以下にしてください。'), { status: 413 });
   const name = String(payload.name || 'file').slice(0, 120);
-  const extension = (/\.([A-Za-z0-9]{1,10})$/.exec(name) || [])[1] || 'bin';
+  const extension = ((/\.([A-Za-z0-9]{1,10})$/.exec(name) || [])[1] || 'bin').toLowerCase();
   return { bytes, extension, name };
 }
 
 async function runJob({ chat, text, action, model, attachment, lesson, controller }) {
   let promptFile;
-  let imageFile;
+  const attachmentFile = attachment ? path.join(store.attachmentsDir, store.attachmentName(chat.id, attachment.messageId, attachment.extension)) : null;
   let writes = Promise.resolve();
   const persist = () => { writes = writes.catch(() => {}).then(() => store.save(chat)); return writes; };
   const record = (type, value) => { appendProgress(chat, type, value); void persist().catch(error => console.error('進行履歴の保存に失敗:', error)); };
@@ -88,12 +97,8 @@ async function runJob({ chat, text, action, model, attachment, lesson, controlle
     const prompt = buildPrompt({ chat: { ...chat, messages: chat.messages.slice(0, -1) }, text, action, lesson });
     promptFile = path.join(store.tmpDir, `${randomUUID()}.txt`);
     await writeFile(promptFile, prompt, 'utf8');
-    if (attachment) {
-      imageFile = path.join(store.tmpDir, `${randomUUID()}.${attachment.extension}`);
-      await writeFile(imageFile, attachment.bytes);
-    }
     record('status', 'OpenCodeを起動しました。');
-    const result = await runOpenCode({ promptFile, attachment: imageFile, model: model || DEFAULT_MODEL, cwd: root, signal: controller.signal,
+    const result = await runOpenCode({ promptFile, attachment: attachmentFile, model: model || DEFAULT_MODEL, cwd: root, signal: controller.signal,
       onText: fragment => {
         if ((action === 'ask' || action === 'question' || action === 'organize') && chat.job) {
           chat.job.partialAnswer = (chat.job.partialAnswer + fragment).slice(0, 80000);
@@ -136,7 +141,7 @@ async function runJob({ chat, text, action, model, attachment, lesson, controlle
     await store.save(chat);
   } finally {
     active.delete(chat.id);
-    await Promise.allSettled([promptFile, imageFile].filter(Boolean).map(file => unlink(file)));
+    if (promptFile) await unlink(promptFile).catch(() => {});
   }
 }
 
@@ -157,7 +162,12 @@ async function send(req, res, id) {
   if (model && (!/^[\w.-]+\/[\w.-]+$/.test(model) || model.length > 120)) return fail(res, 400, 'モデル名は provider/model の形式で入力してください。');
   const attachment = attachmentFromPayload(payload.image);
   const lesson = chat.lesson ? await store.lesson(id) : null;
-  chat.messages.push({ id: randomUUID(), role: 'user', text, action, image: !!attachment, file: attachment ? attachment.name : null, at: new Date().toISOString() });
+  const messageId = randomUUID();
+  if (attachment) {
+    await store.saveAttachment(id, messageId, attachment.extension, attachment.bytes);
+    attachment.messageId = messageId;
+  }
+  chat.messages.push({ id: messageId, role: 'user', text, action, image: !!attachment, file: attachment ? attachment.name : null, fileType: attachment ? String(payload.image.type || '') : null, at: new Date().toISOString() });
   if (chat.messages.length === 1) {
     chat.title = text.slice(0, 36);
     if (!chat.mode) chat.mode = action === 'question' ? 'question' : 'lesson';
@@ -244,6 +254,17 @@ export async function createServer() {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8',
           ...(download ? { 'Content-Disposition': `attachment; filename="study-${lessonMatch[1]}.html"` } : {}) });
         return res.end(html);
+      }
+      const attachmentMatch = /^\/api\/chats\/([0-9a-f-]{36})\/attachment\/([0-9a-f-]{36})$/.exec(url.pathname);
+      if (req.method === 'GET' && attachmentMatch) {
+        const chat = await store.get(attachmentMatch[1]);
+        const message = chat?.messages.find(item => item.id === attachmentMatch[2]);
+        const extension = thumbnailExtension(message);
+        const imageTypes = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
+        const bytes = extension ? await store.attachment(attachmentMatch[1], attachmentMatch[2], extension) : null;
+        if (!bytes) return fail(res, 404, '添付ファイルが見つかりません。');
+        res.writeHead(200, { 'Content-Type': imageTypes[extension], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        return res.end(bytes);
       }
       return fail(res, 404, 'ページが見つかりません。');
     } catch (error) {
