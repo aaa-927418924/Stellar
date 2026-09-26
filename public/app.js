@@ -13,7 +13,7 @@ function saveOrganizedSeen() {
   } catch { /* ignore */ }
 }
 
-const state = { chats: [], current: null, chatMenuTarget: null, organizedSeen: loadOrganizedSeen(), submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
+const state = { chats: [], current: null, chatMenuTarget: null, organizedSeen: loadOrganizedSeen(), organizeArmed: [], submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
 
 function clampPane(value, min, max) { return Math.min(max, Math.max(min, value)); }
 
@@ -214,7 +214,8 @@ function renderMessages() {
   }
   if (shouldScroll && (items.length || job)) pane.scrollTop = pane.scrollHeight;
   const last = items.at(-1);
-  if (last?.organizePrompt && !state.organizedSeen.has(last.id)) {
+  if (last?.organizePrompt && state.current && state.organizeArmed.includes(state.current.id) && !state.organizedSeen.has(last.id)) {
+    state.organizeArmed = state.organizeArmed.filter(id => id !== state.current.id);
     state.organizedSeen.add(last.id);
     saveOrganizedSeen();
     const promptText = last.text;
@@ -353,6 +354,7 @@ async function submit(event) {
 $('composer').addEventListener('submit', submit);
 $('organizeButton').addEventListener('click', async () => {
   if (!state.current || state.current.mode !== 'question' || state.current.job || state.submitting) return;
+  if (!state.organizeArmed.includes(state.current.id)) state.organizeArmed.push(state.current.id);
   try {
     state.current = await api(`/api/chats/${state.current.id}/send`, { method: 'POST', body: JSON.stringify({ text: '教材用のプロンプトを作って', action: 'organize', model: state.model }) });
     await loadChats();

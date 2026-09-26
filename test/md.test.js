@@ -30,14 +30,14 @@ test('エスケープと復元が往復する', () => {
   assert.equal(cleanAiText('\\(a\\)'), 'a');
 });
 
-test('数式は等幅で表示し金額はそのままにする', () => {
+test('数式は等幅で表示する', () => {
   assert.equal(
     renderInlineHtml(escapeHtml('$\\1/2 + \\1/3 = \\5/6$')),
     '<code class="md-math">1/2 + 1/3 = 5/6</code>'
   );
   assert.equal(
-    renderInlineHtml(escapeHtml('りんごは$5と$10です')),
-    'りんごは$5と$10です'
+    renderInlineHtml(escapeHtml('- 傾きが $2$ なら $x$ が $1$ 増える')),
+    '- 傾きが <code class="md-math">2</code> なら <code class="md-math">x</code> が <code class="md-math">1</code> 増える'
   );
   assert.equal(
     renderInlineHtml(escapeHtml('`$x$` と $a+b$')),

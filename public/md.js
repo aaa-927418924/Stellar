@@ -26,7 +26,6 @@ export function renderInlineHtml(text) {
 }
 
 function formatMath(math) {
-  if (!/[\\=+*/^_<>-]/.test(math)) return `$${math}$`;
   return `<code class="md-math">${math.replace(/\\([0-9])/g, '$1')}</code>`;
 }
 
