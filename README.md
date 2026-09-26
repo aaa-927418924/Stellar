@@ -8,6 +8,16 @@ Windows では [start-study.cmd](start-study.cmd) をダブルクリックして
 
 ブラウザーのウィンドウだけを閉じても、コンソールが開いている間は生成が続きます。再度ランチャーを開くと、実行中のアプリへ接続します。終了時は起動情報を破棄します。古い起動情報が残っていても、次回起動時に生存確認のうえ上書きします。
 
+## デスクトップ版（単一exe）
+
+```powershell
+npm run build:exe
+```
+
+`dist/StudyApp.exe`（約50MB、Node.js同梱のため別途インストール不要）にまとめられます。ダブルクリックで起動し、Edgeのアプリウィンドウが開きます。OpenCode CLIとモデルの認証は引き続き必要です。特別な実行ファイルを使う場合は `STUDY_OPENCODE_EXE` を設定します。
+
+exe版の会話と教材は `%APPDATA%\StudyApp\data` に保存されます（開発時の `npm start` はリポジトリ内の `data/` を使うため、履歴は共有されません）。
+
 ```powershell
 cd 'C:\Users\PC_User\Documents\Codex Projects\Study App'
 npm start

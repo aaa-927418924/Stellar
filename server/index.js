@@ -12,7 +12,11 @@ import { appendProgress, progressFromEvent } from './progress.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
-const store = new Store(path.join(root, 'data'));
+const packaged = /[\\/]caxa[\\/]/.test(process.argv[1] || '') || /[\\/]caxa[\\/]/.test(process.execPath);
+const dataRoot = packaged && process.env.APPDATA
+  ? path.join(process.env.APPDATA, 'StudyApp', 'data')
+  : path.join(root, 'data');
+const store = new Store(dataRoot);
 const instancePath = path.join(store.root, 'instance.json');
 const launchSecret = randomBytes(32).toString('hex');
 const active = new Map();
