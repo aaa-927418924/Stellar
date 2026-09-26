@@ -1,8 +1,6 @@
 const $ = id => document.getElementById(id);
 const state = { chats: [], current: null, submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
 
-function modelName(value) { return value || 'Muse Spark 1.3 Free（既定）'; }
-
 function clampPane(value, min, max) { return Math.min(max, Math.max(min, value)); }
 
 function storedPaneWidth(key) {
@@ -205,7 +203,6 @@ function renderPreview() {
 
 function render() {
   $('topTitle').textContent = state.current?.title || '新しいチャット';
-  $('modelLabel').textContent = modelName(state.model);
   const selectedAction = $('actionSelect').value;
   $('actionSelect').innerHTML = '';
   const actions = state.current?.lesson ? [['ask', '教材について質問'], ['revise', '教材を更新']] : [['create', '教材を作る']];
@@ -349,7 +346,6 @@ $('settingsForm').addEventListener('submit', async event => {
   try {
     const settings = await api('/api/settings', { method: 'PUT', body: JSON.stringify({ model: value }) });
     state.model = settings.model;
-    $('modelLabel').textContent = modelName(value);
     $('settingsDialog').close();
   } catch (error) { showToast(error.message); }
 });
@@ -358,6 +354,36 @@ makePaneResizable('sidebarHandle', 'sidebar', { key: 'study-sidebar-width', min:
 makePaneResizable('previewHandle', 'previewPane', { key: 'study-preview-width', min: 320, max: 900, varName: '--preview-w', direction: -1 });
 applyPaneWidths();
 window.addEventListener('resize', applyPaneWidths);
+
+const hostView = !!(window.chrome && window.chrome.webview);
+function postHostMessage(message) {
+  try { if (hostView) window.chrome.webview.postMessage(message); } catch { /* ignore */ }
+}
+if (hostView) {
+  $('windowControls').hidden = false;
+  $('winMin').addEventListener('click', () => postHostMessage({ type: 'min' }));
+  $('winMax').addEventListener('click', () => postHostMessage({ type: 'max' }));
+  $('winClose').addEventListener('click', () => postHostMessage({ type: 'close' }));
+  const topbar = document.querySelector('.topbar');
+  topbar.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || event.target.closest('button,a,input,select,textarea,dialog')) return;
+    postHostMessage({ type: 'drag' });
+  });
+  topbar.addEventListener('dblclick', event => {
+    if (event.target.closest('button,a,input,select,textarea,dialog')) return;
+    postHostMessage({ type: 'max' });
+  });
+  window.chrome.webview.addEventListener('message', event => {
+    const data = event.data || {};
+    if (data.type !== 'maxstate') return;
+    const maximized = !!data.maximized;
+    $('winMax').setAttribute('aria-label', maximized ? '元に戻す' : '最大化');
+    $('winMax').setAttribute('title', maximized ? '元に戻す' : '最大化');
+    $('winMaxIcon').innerHTML = maximized
+      ? '<rect x="6" y="7" width="11" height="11" rx="1"/><path d="M9 7V6a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-1"/>'
+      : '<rect x="4" y="4" width="15" height="15" rx="2"/>';
+  });
+}
 
 async function poll() {
   if (state.polling) return;

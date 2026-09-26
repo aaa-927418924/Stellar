@@ -8,7 +8,7 @@ const identifier = `study-app-v${pkg.version}`;
 const args = [
   '-y', 'caxa@3.0.1',
   '--input', '.',
-  '--output', 'dist/StudyApp.exe',
+  '--output', 'dist/StudyApp/StudyApp.Server.exe',
   '--identifier', identifier,
   '--exclude', 'data/**',
   '--exclude', '.git/**',

@@ -44,10 +44,14 @@
         </button>
         <div class="top-title" id="topTitle">新しいチャット</div>
         <div class="top-actions">
-          <span class="model-label" id="modelLabel">OpenCode 既定モデル</span>
           <button class="icon-button preview-toggle" id="previewToggle" type="button" aria-label="教材プレビューを表示" aria-pressed="false" title="教材プレビューを表示">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>
           </button>
+          <div class="window-controls" id="windowControls" hidden>
+            <button type="button" id="winMin" aria-label="最小化" title="最小化"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+            <button type="button" id="winMax" aria-label="最大化" title="最大化"><svg id="winMaxIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="4" width="15" height="15" rx="2"/></svg></button>
+            <button type="button" id="winClose" class="win-close" aria-label="閉じる" title="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
         </div>
       </header>
 

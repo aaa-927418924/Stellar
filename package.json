@@ -1,12 +1,13 @@
 {
   "name": "interactive-study-app",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test",
-    "build:exe": "node scripts/build-exe.mjs"
+    "build:exe": "node scripts/build-exe.mjs",
+    "build:window": "dotnet publish window/StudyWindow/StudyWindow.csproj -c Release -o dist/StudyApp"
   },
   "engines": { "node": ">=20" }
 }

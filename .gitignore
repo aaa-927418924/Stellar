@@ -1,6 +1,8 @@
 data/
 node_modules/
 dist/
+window/*/bin/
+window/*/obj/
 *.log
 .DS_Store
 Thumbs.db
