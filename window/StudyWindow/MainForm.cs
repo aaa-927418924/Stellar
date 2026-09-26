@@ -14,8 +14,36 @@ public sealed class MainForm : Form
     [DllImport("user32.dll")]
     private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref Margins margins);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Margins
+    {
+        public int Left;
+        public int Right;
+        public int Top;
+        public int Bottom;
+    }
+
     private const int WM_NCLBUTTONDOWN = 0xA1;
+    private const int WM_NCHITTEST = 0x84;
     private const int HTCAPTION = 2;
+    private const int HTLEFT = 10;
+    private const int HTRIGHT = 11;
+    private const int HTTOP = 12;
+    private const int HTTOPLEFT = 13;
+    private const int HTTOPRIGHT = 14;
+    private const int HTBOTTOM = 15;
+    private const int HTBOTTOMLEFT = 16;
+    private const int HTBOTTOMRIGHT = 17;
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWCP_ROUND = 2;
+    private const int DWMWA_BORDER_COLOR = 34;
+    private const int ResizeGrip = 8;
 
     private readonly WebView2 view = new() { Dock = DockStyle.Fill };
     private Process? backend;
@@ -35,6 +63,52 @@ public sealed class MainForm : Form
         Resize += (_, _) => PostMaxState();
         FormClosing += OnClosing;
         Load += async (_, _) => await InitializeAsync();
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        // 枠なしでもWindows標準の角丸・境界線・影を残す。
+        try
+        {
+            var round = DWMWCP_ROUND;
+            DwmSetWindowAttribute(Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
+            var border = 0x2B2B2B;
+            DwmSetWindowAttribute(Handle, DWMWA_BORDER_COLOR, ref border, sizeof(int));
+            var margins = new Margins { Left = 1, Right = 1, Top = 1, Bottom = 1 };
+            DwmExtendFrameIntoClientArea(Handle, ref margins);
+        }
+        catch
+        {
+            // DWMが使えない環境では四角いまま動く。
+        }
+    }
+
+    protected override void WndProc(ref Message message)
+    {
+        // 枠なしでも端を掴んでリサイズできるようにする。
+        if (message.Msg == WM_NCHITTEST && WindowState == FormWindowState.Normal)
+        {
+            base.WndProc(ref message);
+            if ((int)message.Result == 0 || (int)message.Result == 1) // HTNOWHERE / HTCLIENT
+            {
+                var cursor = PointToClient(Cursor.Position);
+                var left = cursor.X < ResizeGrip;
+                var right = cursor.X >= ClientSize.Width - ResizeGrip;
+                var top = cursor.Y < ResizeGrip;
+                var bottom = cursor.Y >= ClientSize.Height - ResizeGrip;
+                if (top && left) message.Result = (IntPtr)HTTOPLEFT;
+                else if (top && right) message.Result = (IntPtr)HTTOPRIGHT;
+                else if (bottom && left) message.Result = (IntPtr)HTBOTTOMLEFT;
+                else if (bottom && right) message.Result = (IntPtr)HTBOTTOMRIGHT;
+                else if (left) message.Result = (IntPtr)HTLEFT;
+                else if (right) message.Result = (IntPtr)HTRIGHT;
+                else if (top) message.Result = (IntPtr)HTTOP;
+                else if (bottom) message.Result = (IntPtr)HTBOTTOM;
+            }
+            return;
+        }
+        base.WndProc(ref message);
     }
 
     private static string BackendPath()
