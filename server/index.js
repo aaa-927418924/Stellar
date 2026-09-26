@@ -124,7 +124,8 @@ async function runJob({ chat, text, action, model, attachment, lesson, controlle
       organizePrompt = true;
     }
     appendProgress(chat, 'status', '完了しました。');
-    chat.messages.push({ id: randomUUID(), role: 'assistant', text: response, ...(organizePrompt ? { organizePrompt: true } : {}), progress: chat.job.progress, at: new Date().toISOString() });
+    const answer = action === 'ask' || action === 'question' || action === 'organize';
+    chat.messages.push({ id: randomUUID(), role: 'assistant', text: response, ...(organizePrompt ? { organizePrompt: true } : {}), ...(answer ? { answer: true } : {}), progress: chat.job.progress, at: new Date().toISOString() });
     chat.job = null;
     await store.save(chat);
   } catch (error) {
@@ -195,6 +196,7 @@ export async function createServer() {
       if (req.method === 'GET' && url.pathname === '/') return staticFile(res, 'index.html', 'text/html');
       if (req.method === 'GET' && url.pathname === '/style.css') return staticFile(res, 'style.css', 'text/css');
       if (req.method === 'GET' && url.pathname === '/app.js') return staticFile(res, 'app.js', 'text/javascript');
+      if (req.method === 'GET' && url.pathname === '/md.js') return staticFile(res, 'md.js', 'text/javascript');
       if (req.method === 'GET' && url.pathname === '/api/chats') return json(res, 200, (await store.list()).map(summary));
       if (req.method === 'POST' && url.pathname === '/api/chats') return json(res, 201, await store.create());
       if (req.method === 'GET' && url.pathname === '/api/settings') {
@@ -217,6 +219,13 @@ export async function createServer() {
       if (req.method === 'GET' && chatMatch) {
         const chat = await store.get(chatMatch[1]);
         return chat ? json(res, 200, chat) : fail(res, 404, 'チャットが見つかりません。');
+      }
+      if (req.method === 'DELETE' && chatMatch) {
+        const chat = await store.get(chatMatch[1]);
+        if (!chat) return fail(res, 404, 'チャットが見つかりません。');
+        if (active.has(chatMatch[1]) || chat.job) return fail(res, 409, '処理中のチャットは削除できません。');
+        await store.delete(chatMatch[1]);
+        return json(res, 200, { status: 'deleted' });
       }
       const sendMatch = /^\/api\/chats\/([0-9a-f-]{36})\/send$/.exec(url.pathname);
       if (req.method === 'POST' && sendMatch) return send(req, res, sendMatch[1]);

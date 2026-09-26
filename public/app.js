@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-const state = { chats: [], current: null, submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true, organizedSeen: null };
+const state = { chats: [], current: null, chatMenuTarget: null, organizedSeen: new Set(), submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true, organizedSeen: new Set() };
 
 function clampPane(value, min, max) { return Math.min(max, Math.max(min, value)); }
 
@@ -89,12 +89,33 @@ function renderChatList() {
     button.textContent = chat.jobStatus === 'running' ? `${chat.title} · 生成中` : chat.title;
     button.title = chat.title;
     button.addEventListener('click', () => openChat(chat.id));
+    button.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      openChatMenu(event.clientX, event.clientY, chat.id, chat.title);
+    });
     list.append(button);
   }
 }
 
+function openChatMenu(x, y, id, title) {
+  const menu = $('chatMenu');
+  state.chatMenuTarget = { id, title };
+  menu.hidden = false;
+  const width = 160, height = 44;
+  menu.style.left = `${Math.min(x, window.innerWidth - width - 8)}px`;
+  menu.style.top = `${Math.min(y, window.innerHeight - height - 8)}px`;
+  $('deleteChatButton').textContent = `「${title.slice(0, 12)}${title.length > 12 ? '…' : ''}」を削除`;
+}
+
+function closeChatMenu() {
+  $('chatMenu').hidden = true;
+  state.chatMenuTarget = null;
+}
+
+import { cleanAiText, renderMarkdown } from './md.js';
+
 function appendMessageText(container, raw) {
-  const text = String(raw || '').replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '$1/$2').replace(/\\\((.*?)\\\)/g, '$1').replace(/\\\[|\\\]/g, '').replace(/\\times|\\cdot/g, '×').replace(/\\div/g, '÷').replace(/ {2}\n/g, '\n');
+  const text = cleanAiText(raw);
   const emphasis = /\*\*([^*\n]+)\*\*/g;
   let offset = 0;
   for (const match of text.matchAll(emphasis)) {
@@ -125,9 +146,10 @@ function messageElement(message) {
   }
   const body = document.createElement('div');
   body.className = 'message-body';
-  appendMessageText(body, message.text);
+  if (message.role === 'assistant') renderMarkdown(body, message.text);
+  else appendMessageText(body, message.text);
   element.append(body);
-  if (message.progress?.length) {
+  if (message.progress?.length && !message.answer) {
     const details = document.createElement('details');
     details.className = 'progress-log';
     details.open = !!message.pending && state.progressOpen;
@@ -178,10 +200,13 @@ function renderMessages() {
   }
   if (shouldScroll && (items.length || job)) pane.scrollTop = pane.scrollHeight;
   const last = items.at(-1);
-  if (last?.organizePrompt && state.organizedSeen !== last.id) {
-    state.organizedSeen = last.id;
-    if (!$('messageInput').value.trim()) $('messageInput').value = last.text;
-    showToast('教材用プロンプトを用意しました。使う場合は別チャットへ貼り付けてください。');
+  if (last?.organizePrompt && !state.organizedSeen.has(last.id)) {
+    state.organizedSeen.add(last.id);
+    const promptText = last.text;
+    newChat();
+    $('messageInput').value = promptText;
+    $('messageInput').focus();
+    showToast('教材用プロンプトを新しいチャットに入れました。内容を確認して送信してください。');
   }
 }
 
@@ -237,7 +262,6 @@ function render() {
 
 async function openChat(id) {
   state.current = await api(`/api/chats/${id}`);
-  state.organizedSeen = null;
   state.mobileTab = 'chat';
   state.previewOpen = true;
   state.progressOpen = true;
@@ -247,7 +271,6 @@ async function openChat(id) {
 
 function newChat() {
   state.current = null;
-  state.organizedSeen = null;
   document.title = 'Study App';
   state.mobileTab = 'chat';
   state.previewOpen = true;
@@ -338,7 +361,25 @@ $('previewToggle').addEventListener('click', () => { state.previewOpen = !state.
 $('reloadPreview').addEventListener('click', () => { $('lessonFrame').src = `${lessonUrl()}?v=${Date.now()}`; });
 $('menuButton').addEventListener('click', () => $('sidebar').classList.add('open'));
 $('closeSidebar').addEventListener('click', () => $('sidebar').classList.remove('open'));
-document.addEventListener('keydown', event => { if (event.key === 'Escape') $('sidebar').classList.remove('open'); });
+$('deleteChatButton').addEventListener('click', async () => {
+  const target = state.chatMenuTarget;
+  closeChatMenu();
+  if (!target) return;
+  if (!window.confirm(`「${target.title}」を削除しますか？教材も一緒に消えます。`)) return;
+  try {
+    await api(`/api/chats/${target.id}`, { method: 'DELETE' });
+    if (state.current?.id === target.id) newChat();
+    else await loadChats();
+    render();
+    showToast('チャットを削除しました。');
+  } catch (error) { showToast(error.message); }
+});
+document.addEventListener('click', event => {
+  if (!event.target.closest('#chatMenu')) closeChatMenu();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') { closeChatMenu(); $('sidebar').classList.remove('open'); }
+});
 for (const button of document.querySelectorAll('[data-example]')) button.addEventListener('click', () => { $('messageInput').value = button.dataset.example; $('messageInput').focus(); });
 for (const button of document.querySelectorAll('.mobile-tab')) button.addEventListener('click', () => { state.mobileTab = button.dataset.tab; renderPreview(); });
 async function refreshModelOptions() {

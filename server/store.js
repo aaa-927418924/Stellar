@@ -80,6 +80,13 @@ export class Store {
     }
   }
 
+  async delete(id) {
+    this.chatPath(id);
+    this.lessonPath(id);
+    await unlink(this.chatPath(id)).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    await unlink(this.lessonPath(id)).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  }
+
   async settings() {
     try { return JSON.parse(await readFile(path.join(this.root, 'settings.json'), 'utf8')); }
     catch (error) {
