@@ -1,12 +1,12 @@
 {
   "name": "interactive-study-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test",
-    "build:exe": "npx -y caxa@3.0.1 --input \".\" --output \"dist/StudyApp.exe\" --identifier \"study-app\" --exclude \"data/**\" --exclude \".git/**\" --exclude \"**/node_modules/**\" --exclude \"test/**\" --exclude \"dist/**\" -- \"{{caxa}}/node_modules/.bin/node\" \"{{caxa}}/server/index.js\""
+    "build:exe": "node scripts/build-exe.mjs"
   },
   "engines": { "node": ">=20" }
 }
