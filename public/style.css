@@ -15,8 +15,8 @@
 #previewHandle{left:0}
 @media(max-width:900px){#sidebarHandle{display:none}}
 @media(max-width:710px){#previewHandle{display:none}}
-.window-controls{display:flex;align-self:stretch;margin-inline-end:-26px}
-.window-controls button{width:46px;border:0;background:transparent;color:#cfcfcf;display:grid;place-items:center;padding:0}
+.window-controls{display:flex;align-items:center;margin-inline-end:-26px}
+.window-controls button{width:46px;height:46px;border:0;background:transparent;color:#cfcfcf;display:grid;place-items:center;padding:0}
 .window-controls button:hover{background:#3a3a3a;color:#fff}
 .window-controls .win-close:hover{background:#c42b1c;color:#fff}
 .window-controls svg{width:15px;height:15px}

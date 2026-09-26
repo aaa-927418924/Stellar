@@ -57,6 +57,7 @@ public sealed class MainForm : Form
         MinimumSize = new Size(900, 600);
         FormBorderStyle = FormBorderStyle.None;
         BackColor = Color.FromArgb(0x17, 0x17, 0x17);
+        try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { /* ignore */ }
         Controls.Add(view);
         view.DefaultBackgroundColor = Color.FromArgb(0x17, 0x17, 0x17);
         view.WebMessageReceived += OnWebMessage;
