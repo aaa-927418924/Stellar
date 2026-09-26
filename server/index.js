@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { Store } from './store.js';
 import { buildPrompt, extractHtml } from './prompts.js';
-import { runOpenCode, listModels, DEFAULT_MODEL } from './opencode.js';
+import { runOpenCode, listModels, findOpenCode, DEFAULT_MODEL } from './opencode.js';
 import { appendProgress, progressFromEvent } from './progress.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,6 +22,7 @@ const launchSecret = randomBytes(32).toString('hex');
 const active = new Map();
 const MAX_BODY = 12_000_000;
 let modelCache = { at: 0, models: [] };
+let opencodeStatus = { ok: false, path: null };
 
 function json(res, status, value) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -186,7 +187,9 @@ export async function createServer() {
       if (req.method === 'GET' && url.pathname === '/app.js') return staticFile(res, 'app.js', 'text/javascript');
       if (req.method === 'GET' && url.pathname === '/api/chats') return json(res, 200, (await store.list()).map(summary));
       if (req.method === 'POST' && url.pathname === '/api/chats') return json(res, 201, await store.create());
-      if (req.method === 'GET' && url.pathname === '/api/settings') return json(res, 200, await store.settings());
+      if (req.method === 'GET' && url.pathname === '/api/settings') {
+        return json(res, 200, { ...(await store.settings()), opencodeOk: opencodeStatus.ok, opencodePath: opencodeStatus.path });
+      }
       if (req.method === 'GET' && url.pathname === '/api/models') {
         if (Date.now() - modelCache.at > 600_000) {
           modelCache = { at: Date.now(), models: await listModels({ cwd: root }) };
@@ -265,6 +268,9 @@ function cleanupInstance() {
 
 async function main() {
   await store.init();
+  const found = findOpenCode();
+  opencodeStatus = { ok: !!found, path: found };
+  if (!found) console.error('OpenCode CLIが見つかりません。教材生成には `npm install -g opencode-ai` が必要です。');
   const existing = await runningInstance();
   if (existing) {
     console.log('Study App は既に起動しています。既存のウィンドウを開きます。');

@@ -15,6 +15,8 @@ const args = [
   '--exclude', '**/node_modules/**',
   '--exclude', 'test/**',
   '--exclude', 'dist/**',
+  '--exclude', 'window/*/bin/**',
+  '--exclude', 'window/*/obj/**',
   '--', '{{caxa}}/node_modules/.bin/node', '{{caxa}}/server/index.js'
 ];
 const result = spawnSync('npx', args, { stdio: 'inherit', shell: process.platform === 'win32' });

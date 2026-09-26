@@ -338,6 +338,7 @@ async function refreshModelOptions() {
 }
 $('settingsButton').addEventListener('click', async () => { await refreshModelOptions(); $('settingsDialog').showModal(); });
 $('closeSettings').addEventListener('click', () => $('settingsDialog').close());
+$('closeOpencodeDialog').addEventListener('click', () => $('opencodeDialog').close());
 $('settingsForm').addEventListener('submit', async event => {
   event.preventDefault();
   const manual = $('modelInputFallback').value.trim();
@@ -421,6 +422,7 @@ async function poll() {
 
 Promise.all([loadChats(), api('/api/settings')]).then(async ([, settings]) => {
   state.model = settings.model || '';
+  if (!settings.opencodeOk) $('opencodeDialog').showModal();
   const running = state.chats.find(chat => chat.jobStatus === 'running');
   if (running) state.current = await api(`/api/chats/${running.id}`);
   render();

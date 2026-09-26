@@ -125,5 +125,14 @@
     </form>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="opencodeDialog" aria-labelledby="opencodeTitle">
+    <div class="settings-form">
+      <div class="settings-heading"><h2 id="opencodeTitle">OpenCode CLIが見つかりません</h2><button class="icon-button" id="closeOpencodeDialog" type="button" aria-label="閉じる">×</button></div>
+      <p>教材の生成にはOpenCode CLIが必要です。次のコマンドでインストールしてから、アプリを再起動してください。</p>
+      <p><code>npm install -g opencode-ai</code></p>
+      <p>別の場所にある場合は <code>STUDY_OPENCODE_EXE</code> に実行ファイルの絶対パスを設定します。チャットの閲覧と保存はこのまま使えます。</p>
+    </div>
+  </dialog>
 </body>
 </html>

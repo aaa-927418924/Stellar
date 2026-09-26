@@ -1,14 +1,39 @@
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 function command() {
-  if (process.env.STUDY_OPENCODE_EXE) return process.env.STUDY_OPENCODE_EXE;
+  return findOpenCodeSync() || 'opencode';
+}
+
+function candidatePaths() {
+  const paths = [];
+  if (process.env.STUDY_OPENCODE_EXE) paths.push(process.env.STUDY_OPENCODE_EXE);
   if (process.platform === 'win32') {
-    const exe = path.join(process.env.APPDATA || '', 'npm', 'node_modules', 'opencode-ai', 'bin', 'opencode.exe');
-    if (existsSync(exe)) return exe;
+    paths.push(path.join(process.env.APPDATA || '', 'npm', 'node_modules', 'opencode-ai', 'bin', 'opencode.exe'));
   }
-  return 'opencode';
+  return paths;
+}
+
+function findOpenCodeSync() {
+  for (const candidate of candidatePaths()) {
+    try {
+      if (candidate && existsSync(candidate)) return candidate;
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+
+export function findOpenCode() {
+  const direct = findOpenCodeSync();
+  if (direct) return direct;
+  try {
+    const probe = process.platform === 'win32' ? 'where' : 'which';
+    const found = execFileSync(probe, ['opencode'], { encoding: 'utf8', timeout: 5000, windowsHide: true });
+    const first = found.split(/\r?\n/).map(line => line.trim()).filter(Boolean)[0];
+    if (first) return first;
+  } catch { /* ignore */ }
+  return null;
 }
 
 export const DEFAULT_MODEL = 'opencode/muse-spark-1.3-contributor-free';
