@@ -391,6 +391,7 @@ function renderAttachmentChips() {
       renderAttachmentChips();
     });
     chip.append(name, remove);
+    wrap.append(chip);
   }
 }
 
