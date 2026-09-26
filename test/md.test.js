@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanAiText, escapeHtml, renderInlineHtml, unescapeHtml } from '../public/md.js';
+import { cleanAiText, escapeHtml, parseTableBlock, renderInlineHtml, unescapeHtml } from '../public/md.js';
 
 test('HTMLを無害化して太字・斜体・コード・リンクを表示する', () => {
   assert.equal(
@@ -28,4 +28,28 @@ test('HTMLを無害化して太字・斜体・コード・リンクを表示す�
 test('エスケープと復元が往復する', () => {
   assert.equal(unescapeHtml(escapeHtml('<a href="x">&</a>')), '<a href="x">&</a>');
   assert.equal(cleanAiText('\\(a\\)'), 'a');
+});
+
+test('数式は等幅で表示し金額はそのままにする', () => {
+  assert.equal(
+    renderInlineHtml(escapeHtml('$\\1/2 + \\1/3 = \\5/6$')),
+    '<code class="md-math">1/2 + 1/3 = 5/6</code>'
+  );
+  assert.equal(
+    renderInlineHtml(escapeHtml('りんごは$5と$10です')),
+    'りんごは$5と$10です'
+  );
+  assert.equal(
+    renderInlineHtml(escapeHtml('`$x$` と $a+b$')),
+    '<code>$x$</code> と <code class="md-math">a+b</code>'
+  );
+});
+
+test('表ブロックを認識する', () => {
+  const table = parseTableBlock(['| 名前 | 点 |', '| --- | ---: |', '| A | 90 |', '| B | 80 |']);
+  assert.deepEqual(table.header, ['名前', '点']);
+  assert.deepEqual(table.align, ['', 'right']);
+  assert.deepEqual(table.body, [['A', '90'], ['B', '80']]);
+  assert.equal(parseTableBlock(['| A |', 'ただの文']), null);
+  assert.equal(parseTableBlock(['| A | B |', '| --- |', '| C |']), null);
 });

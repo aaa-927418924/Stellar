@@ -19,8 +19,15 @@ export function renderInlineHtml(text) {
   const formatted = stashed
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*\w])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+    .replace(/\$\$([^$\n]+)\$\$/g, (_, math) => formatMath(math))
+    .replace(/\$([^$\n]+)\$/g, (_, math) => formatMath(math))
     .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
   return formatted.replace(/\u0000(\d+)\u0000/g, (_, index) => `<code>${codes[Number(index)]}</code>`);
+}
+
+function formatMath(math) {
+  if (!/[\\=+*/^_<>-]/.test(math)) return `$${math}$`;
+  return `<code class="md-math">${math.replace(/\\([0-9])/g, '$1')}</code>`;
 }
 
 export function appendListBlock(container, lines) {
@@ -52,48 +59,108 @@ export function appendParagraph(container, lines) {
   container.append(paragraph);
 }
 
+export function splitTableRow(line) {
+  let cells = line.trim().split('|');
+  if (cells.length > 0 && cells[0].trim() === '') cells = cells.slice(1);
+  if (cells.length > 0 && cells[cells.length - 1].trim() === '') cells = cells.slice(0, -1);
+  return cells.map(cell => cell.trim());
+}
+
+export function parseTableBlock(lines) {
+  const rows = lines.filter(line => line.trim());
+  if (rows.length < 2) return null;
+  const delim = splitTableRow(rows[1]);
+  if (delim.length === 0 || !delim.every(cell => /^:?-+:?$/.test(cell))) return null;
+  const header = splitTableRow(rows[0]);
+  if (header.length !== delim.length) return null;
+  const body = [];
+  for (let index = 2; index < rows.length; index++) {
+    const cells = splitTableRow(rows[index]);
+    if (cells.length !== delim.length) return null;
+    body.push(cells);
+  }
+  const align = delim.map(cell => {
+    if (cell.startsWith(':') && cell.endsWith(':') && cell.length > 2) return 'center';
+    if (cell.endsWith(':')) return 'right';
+    if (cell.startsWith(':')) return 'left';
+    return '';
+  });
+  return { header, align, body };
+}
+
+export function appendTableBlock(container, table) {
+  const element = document.createElement('table');
+  element.className = 'md-table';
+  const head = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  table.header.forEach((cell, index) => {
+    const th = document.createElement('th');
+    if (table.align[index]) th.setAttribute('align', table.align[index]);
+    th.innerHTML = renderInlineHtml(cell);
+    headRow.append(th);
+  });
+  head.append(headRow);
+  element.append(head);
+  const body = document.createElement('tbody');
+  for (const row of table.body) {
+    const tr = document.createElement('tr');
+    row.forEach((cell, index) => {
+      const td = document.createElement('td');
+      if (table.align[index]) td.setAttribute('align', table.align[index]);
+      td.innerHTML = renderInlineHtml(cell);
+      tr.append(td);
+    });
+    body.append(tr);
+  }
+  element.append(body);
+  container.append(element);
+}
+
+export function emitHeading(container, match) {
+  const level = Math.min(match[1].length, 4);
+  const element = document.createElement(`h${level}`);
+  element.innerHTML = renderInlineHtml(match[2]);
+  container.append(element);
+}
+
 export function appendTextBlock(container, lines) {
   if (lines.every(line => !line.trim())) return;
-  const first = lines.find(line => line.trim());
-  const heading = /^(#{1,6})\s+(.*)$/.exec(first);
-  if (heading && lines.every(line => !line.trim() || line === first)) {
-    const level = Math.min(heading[1].length, 4);
-    const element = document.createElement(`h${level}`);
-    element.innerHTML = renderInlineHtml(heading[2]);
-    container.append(element);
+  const table = parseTableBlock(lines);
+  if (table) {
+    appendTableBlock(container, table);
     return;
   }
-  if (lines.length === 1 && /^---+$/.test(first.trim())) {
-    container.append(document.createElement('hr'));
-    return;
-  }
-  if (lines.every(line => !line.trim() || /^\s*&gt;/.test(line))) {
-    const quote = document.createElement('blockquote');
-    quote.innerHTML = lines
-      .map(line => line.replace(/^\s*&gt;\s?/, ''))
-      .filter((line, index, all) => line.trim() || (all[index - 1] && all[index - 1].trim()) || (all[index + 1] && all[index + 1].trim()))
-      .map(renderInlineHtml).join('<br>');
-    container.append(quote);
-    return;
-  }
-  if (lines.some(line => /^\s*([-*+]|\d+[.)])\s+/.test(line))) {
-    let run = [];
-    const flushRun = () => {
-      if (run.length === 0) return;
-      if (run.some(line => /^\s*([-*+]|\d+[.)])\s+/.test(line))) appendListBlock(container, run);
-      else appendParagraph(container, run);
-      run = [];
-    };
-    for (const line of lines) {
-      const isList = /^\s*([-*+]|\d+[.)])\s+/.test(line);
-      const wasList = run.length > 0 && /^\s*([-*+]|\d+[.)])\s+/.test(run[run.length - 1]);
-      if (run.length > 0 && isList !== wasList) flushRun();
-      run.push(line);
+  let para = [];
+  let listRun = [];
+  const flushPara = () => {
+    if (para.length === 0) return;
+    if (para.every(line => /^\s*&gt;/.test(line))) {
+      const quote = document.createElement('blockquote');
+      quote.innerHTML = para
+        .map(line => line.replace(/^\s*&gt;\s?/, ''))
+        .map(renderInlineHtml).join('<br>');
+      container.append(quote);
+    } else appendParagraph(container, para);
+    para = [];
+  };
+  const flushList = () => {
+    if (listRun.length === 0) return;
+    appendListBlock(container, listRun);
+    listRun = [];
+  };
+  for (const line of lines) {
+    if (!line.trim()) { flushPara(); flushList(); continue; }
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) { flushPara(); flushList(); emitHeading(container, heading); continue; }
+    if (/^---+$/.test(line.trim())) {
+      flushPara(); flushList();
+      container.append(document.createElement('hr'));
+      continue;
     }
-    flushRun();
-    return;
+    if (/^\s*([-*+]|\d+[.)])\s+/.test(line)) { flushPara(); listRun.push(line); continue; }
+    flushList(); para.push(line);
   }
-  appendParagraph(container, lines);
+  flushPara(); flushList();
 }
 
 export function renderMarkdown(container, raw) {

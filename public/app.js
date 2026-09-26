@@ -1,5 +1,19 @@
 const $ = id => document.getElementById(id);
-const state = { chats: [], current: null, chatMenuTarget: null, organizedSeen: new Set(), submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true, organizedSeen: new Set() };
+function loadOrganizedSeen() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('study-organized-seen') || '[]');
+    const ids = Array.isArray(raw) ? raw.filter(id => typeof id === 'string').slice(-200) : [];
+    return new Set(ids);
+  } catch { return new Set(); }
+}
+
+function saveOrganizedSeen() {
+  try {
+    localStorage.setItem('study-organized-seen', JSON.stringify([...state.organizedSeen].slice(-200)));
+  } catch { /* ignore */ }
+}
+
+const state = { chats: [], current: null, chatMenuTarget: null, organizedSeen: loadOrganizedSeen(), submitting: false, polling: false, image: null, mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
 
 function clampPane(value, min, max) { return Math.min(max, Math.max(min, value)); }
 
@@ -202,8 +216,10 @@ function renderMessages() {
   const last = items.at(-1);
   if (last?.organizePrompt && !state.organizedSeen.has(last.id)) {
     state.organizedSeen.add(last.id);
+    saveOrganizedSeen();
     const promptText = last.text;
     newChat();
+    $('actionSelect').value = 'create';
     $('messageInput').value = promptText;
     $('messageInput').focus();
     showToast('教材用プロンプトを新しいチャットに入れました。内容を確認して送信してください。');
