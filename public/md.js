@@ -25,8 +25,33 @@ export function renderInlineHtml(text) {
   return formatted.replace(/\u0000(\d+)\u0000/g, (_, index) => `<code>${codes[Number(index)]}</code>`);
 }
 
+const LATEX_SYMBOLS = {
+  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', theta: 'θ',
+  lambda: 'λ', mu: 'μ', pi: 'π', sigma: 'σ', omega: 'Ω',
+  infty: '∞', sum: 'Σ', int: '∫', times: '×', div: '÷', cdot: '·',
+  pm: '±', leq: '≤', geq: '≥', neq: '≠', approx: '≈', to: '→',
+  log: 'log', sin: 'sin', cos: 'cos', tan: 'tan'
+};
+
+export function convertLatexMath(text) {
+  let out = String(text || '');
+  out = out.replace(/\\begin\{[^}]*\}/g, '').replace(/\\end\{[^}]*\}/g, '');
+  out = out.replace(/\\\\/g, '\n');
+  out = out.replace(/\\(d?frac)\{([^{}]*)\}\{([^{}]*)\}/g, '($2)/($3)');
+  out = out.replace(/\\sqrt(?:\[[^\]]*\])?\{([^{}]*)\}/g, '√($1)');
+  out = out.replace(/\\(text|mathrm|mathbf|mathit|boldsymbol)\{([^{}]*)\}/g, '$2');
+  out = out.replace(/\\(left|right)\b/g, '');
+  out = out.replace(/\\&amp;/g, '&');
+  out = out.replace(/&amp;/g, ' ');
+  out = out.replace(/\\([ ,:;])/g, ' ').replace(/\\!/g, '');
+  out = out.replace(/\\([\\^_%${}#])/g, '$1');
+  out = out.replace(/\\([a-zA-Z]+)/g, (match, name) => LATEX_SYMBOLS[name] ?? match);
+  out = out.replace(/\\([0-9])/g, '$1');
+  return out.split('\n').map(line => line.trim()).filter(line => line).join('\n');
+}
+
 function formatMath(math) {
-  return `<code class="md-math">${math.replace(/\\([0-9])/g, '$1')}</code>`;
+  return `<code class="md-math">${convertLatexMath(math)}</code>`;
 }
 
 export function appendListBlock(container, lines) {
@@ -167,6 +192,32 @@ export function renderMarkdown(container, raw) {
   const segments = [];
   let text = [];
   for (let index = 0; index < lines.length; index++) {
+    const mathOpen = /^\$\$(.*)$/.exec(lines[index]);
+    if (mathOpen) {
+      if (text.length > 0) { segments.push({ type: 'text', lines: text }); text = []; }
+      const rest = mathOpen[1];
+      const closeAt = rest.indexOf('$$');
+      if (closeAt >= 0) {
+        segments.push({ type: 'math', text: rest.slice(0, closeAt) });
+        const after = rest.slice(closeAt + 2);
+        if (after.trim()) text.push(after);
+      } else {
+        const body = [];
+        index++;
+        while (index < lines.length && lines[index].indexOf('$$') < 0) { body.push(lines[index]); index++; }
+        if (index < lines.length) {
+          const closing = lines[index];
+          const head = closing.slice(0, closing.indexOf('$$'));
+          if (head.trim()) body.push(head);
+          const after = closing.slice(closing.indexOf('$$') + 2);
+          segments.push({ type: 'math', text: body.join('\n') });
+          text = after.trim() ? [after] : [];
+        } else {
+          segments.push({ type: 'math', text: body.join('\n') });
+        }
+      }
+      continue;
+    }
     if (/^```/.test(lines[index])) {
       if (text.length > 0) { segments.push({ type: 'text', lines: text }); text = []; }
       const code = [];
@@ -177,6 +228,15 @@ export function renderMarkdown(container, raw) {
   }
   if (text.length > 0) segments.push({ type: 'text', lines: text });
   for (const segment of segments) {
+    if (segment.type === 'math') {
+      const pre = document.createElement('pre');
+      pre.className = 'md-math-block';
+      const code = document.createElement('code');
+      code.textContent = convertLatexMath(segment.text);
+      pre.append(code);
+      container.append(pre);
+      continue;
+    }
     if (segment.type === 'code') {
       const pre = document.createElement('pre');
       pre.className = 'md-code';

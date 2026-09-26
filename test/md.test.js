@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanAiText, escapeHtml, parseTableBlock, renderInlineHtml, unescapeHtml } from '../public/md.js';
+import { cleanAiText, convertLatexMath, escapeHtml, parseTableBlock, renderInlineHtml, unescapeHtml } from '../public/md.js';
 
 test('HTMLを無害化して太字・斜体・コード・リンクを表示する', () => {
   assert.equal(
@@ -52,4 +52,14 @@ test('表ブロックを認識する', () => {
   assert.deepEqual(table.body, [['A', '90'], ['B', '80']]);
   assert.equal(parseTableBlock(['| A |', 'ただの文']), null);
   assert.equal(parseTableBlock(['| A | B |', '| --- |', '| C |']), null);
+});
+
+test('LaTeX数式を読みやすく変換する', () => {
+  assert.equal(
+    convertLatexMath('\\begin{aligned}\nx + y &amp;= 3 \\\\\n2x - y &amp;= 0\n\\end{aligned}'),
+    'x + y  = 3\n2x - y  = 0'
+  );
+  assert.equal(convertLatexMath('\\alpha + \\beta = \\gamma'), 'α + β = γ');
+  assert.equal(convertLatexMath('\\sqrt{x} + \\frac{a}{b}'), '√(x) + (a)/(b)');
+  assert.equal(convertLatexMath('a^2 + b^2 = c^2'), 'a^2 + b^2 = c^2');
 });
