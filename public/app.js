@@ -183,6 +183,55 @@ function quizSessionId(messageId) {
   return quizSessions.get(messageId);
 }
 
+function quizDraftKey(messageId, index) {
+  return `${messageId}:${index}`;
+}
+
+function loadQuizDrafts() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('study-quiz-drafts') || '{}');
+    if (raw && typeof raw === 'object') return raw;
+  } catch { /* ignore */ }
+  return {};
+}
+
+function saveQuizDraft(key, value) {
+  try {
+    const drafts = loadQuizDrafts();
+    drafts[key] = String(value).slice(0, 500);
+    const keys = Object.keys(drafts).slice(-100);
+    const trimmed = {};
+    for (const k of keys) trimmed[k] = drafts[k];
+    localStorage.setItem('study-quiz-drafts', JSON.stringify(trimmed));
+  } catch { /* ignore */ }
+}
+
+function clearQuizDraft(key) {
+  try {
+    const drafts = loadQuizDrafts();
+    delete drafts[key];
+    localStorage.setItem('study-quiz-drafts', JSON.stringify(drafts));
+  } catch { /* ignore */ }
+}
+
+function collectQuizDrafts() {
+  const drafts = new Map();
+  for (const input of document.querySelectorAll('.quiz-row input[data-message]')) {
+    if (input.value) drafts.set(quizDraftKey(input.dataset.message, input.dataset.index), input.value);
+  }
+  return drafts;
+}
+
+function applyQuizDrafts(extra) {
+  const stored = loadQuizDrafts();
+  for (const input of document.querySelectorAll('.quiz-row input[data-message]')) {
+    if (input.value || input.disabled) continue;
+    const key = quizDraftKey(input.dataset.message, input.dataset.index);
+    const value = (extra && extra.get(key)) || stored[key];
+    if (value) input.value = value;
+  }
+}
+
 function paintQuizResult(box, quiz, index) {
   box.replaceChildren();
   const state = quiz.results[index];
@@ -240,7 +289,10 @@ function quizElement(message, options = {}) {
     input.maxLength = 500;
     input.placeholder = '答えを入力してEnter';
     input.setAttribute('aria-label', `問題${index + 1}の回答`);
+    input.dataset.message = message.id;
+    input.dataset.index = String(index);
     input.disabled = !!(results[index] && results[index].attempts > 0);
+    input.addEventListener('input', () => saveQuizDraft(quizDraftKey(message.id, index), input.value));
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = '判定';
@@ -260,7 +312,12 @@ function quizElement(message, options = {}) {
         const entry = { attempts: response.attempts, correct: (results[index]?.correct || 0) + (response.ok ? 1 : 0), lastOk: response.ok };
         results[index] = entry;
         paintQuizResult(result, quiz, index);
+        clearQuizDraft(quizDraftKey(message.id, index));
         input.disabled = true;
+        if (options.onJudged) {
+          try { await options.onJudged(); }
+          catch (error) { showToast(error.message); }
+        }
       } catch (error) {
         showToast(error.message);
         input.disabled = false;
@@ -372,6 +429,7 @@ function placeComposer(empty) {
   }
 }
 function renderMessages() {
+  const drafts = collectQuizDrafts();
   const messages = $('messages');
   const pane = $('conversation');
   const shouldScroll = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 130;
@@ -395,6 +453,7 @@ function renderMessages() {
     messages.append(pending);
   }
   if (shouldScroll && (items.length || job)) pane.scrollTop = pane.scrollHeight;
+  applyQuizDrafts(drafts);
   const last = items.at(-1);
   if (last?.organizePrompt && state.current && state.organizeArmed.includes(state.current.id) && !state.organizedSeen.has(last.id)) {
     state.organizeArmed = state.organizeArmed.filter(id => id !== state.current.id);
@@ -590,7 +649,6 @@ $('messageInput').addEventListener('keydown', event => {
 });
 $('newChat').addEventListener('click', newChat);
 $('libraryButton').addEventListener('click', openLibrary);
-$('closeLibrary').addEventListener('click', closeLibraryView);
 $('libraryPrev').addEventListener('click', () => { state.libraryPage--; renderLibrary(); });
 $('libraryNext').addEventListener('click', () => { state.libraryPage++; renderLibrary(); });
 $('fileInput').addEventListener('change', event => {
@@ -732,13 +790,6 @@ async function openLibrary() {
   renderLibrary();
 }
 
-function closeLibraryView() {
-  $('libraryView').hidden = true;
-  $('contentGrid').hidden = false;
-  state.librarySelected = null;
-  render();
-}
-
 function renderLibrary() {
   const grid = $('libraryGrid');
   grid.replaceChildren();
@@ -795,7 +846,17 @@ async function openLibraryItem(item) {
     note.className = 'library-meta';
     note.textContent = `${message.quiz.items.length}問 · 最初から解けます（記録は保存されます）`;
     quizHost.append(note);
-    quizHost.append(quizElement(message, { chatId: item.chatId, source: 'library', fresh: true, session: crypto.randomUUID() }));
+    quizHost.append(quizElement(message, {
+      chatId: item.chatId,
+      source: 'library',
+      fresh: true,
+      session: crypto.randomUUID(),
+      onJudged: async () => {
+        state.library = await api('/api/library');
+        renderLibrary();
+      }
+    }));
+    applyQuizDrafts(null);
   } catch (error) { showToast(error.message); }
 }
 
