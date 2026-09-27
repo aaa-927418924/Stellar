@@ -290,6 +290,7 @@ export async function createServer() {
         const index = Number(payload.index);
         const text = String(payload.text || '');
         const source = ['initial', 'library', 'review'].includes(payload.source) ? payload.source : 'initial';
+        const session = /^[0-9a-f-]{36}$/i.test(payload.session || '') ? payload.session : null;
         const item = message.quiz.items[index];
         if (!Number.isInteger(index) || !item || !text.trim() || text.length > 500) {
           return fail(res, 400, '回答は1～500文字で入力してください。');
@@ -307,14 +308,22 @@ export async function createServer() {
           const prev = message.quiz.results[i];
           return prev ? !!prev.lastOk : null;
         });
-        attempts.push({
-          n: attempts.length + 1,
-          at: new Date().toISOString(),
-          source,
-          total: message.quiz.items.length,
-          correct: finishedItems.filter(Boolean).length,
-          items: finishedItems
-        });
+        const latest = attempts[attempts.length - 1];
+        if (session && latest && latest.session === session) {
+          latest.at = new Date().toISOString();
+          latest.correct = finishedItems.filter(Boolean).length;
+          latest.items = finishedItems;
+        } else {
+          attempts.push({
+            n: attempts.length + 1,
+            at: new Date().toISOString(),
+            source,
+            session: session || undefined,
+            total: message.quiz.items.length,
+            correct: finishedItems.filter(Boolean).length,
+            items: finishedItems
+          });
+        }
         const results = { ...message.quiz.results, [index]: entry };
         message.quiz = { items: message.quiz.items, results, attempts, summary: message.quiz.summary || '' };
         await store.save(chat);

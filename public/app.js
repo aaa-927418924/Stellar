@@ -176,6 +176,13 @@ function closeLightbox() {
   document.body.classList.remove('lightbox-open');
 }
 
+const quizSessions = new Map();
+
+function quizSessionId(messageId) {
+  if (!quizSessions.has(messageId)) quizSessions.set(messageId, crypto.randomUUID());
+  return quizSessions.get(messageId);
+}
+
 function paintQuizResult(box, quiz, index) {
   box.replaceChildren();
   const state = quiz.results[index];
@@ -203,6 +210,7 @@ function quizElement(message, options = {}) {
   const chatId = options.chatId || state.current?.id;
   const source = options.source || 'initial';
   const results = options.fresh ? {} : (message.quiz.results || {});
+  const session = options.session || quizSessionId(message.id);
   const quiz = { items: message.quiz.items, results };
   const wrap = document.createElement('div');
   wrap.className = 'quiz';
@@ -247,7 +255,7 @@ function quizElement(message, options = {}) {
       try {
         const response = await api(`/api/chats/${chatId}/messages/${message.id}/answer`, {
           method: 'POST',
-          body: JSON.stringify({ index, text: value, source })
+          body: JSON.stringify({ index, text: value, source, session })
         });
         const entry = { attempts: response.attempts, correct: (results[index]?.correct || 0) + (response.ok ? 1 : 0), lastOk: response.ok };
         results[index] = entry;
@@ -700,9 +708,8 @@ function libraryDate(at) {
 function libraryStatsText(item) {
   if (item.kind !== 'quiz') return libraryDate(item.at);
   const stats = item.stats || { count: 0 };
-  if (!stats.count) return `未挑戦 · ${item.total}問 · ${libraryDate(item.at)}`;
-  const mark = stats.lastOk ? '○' : '×';
-  return `${stats.count}回挑戦 · 最終 ${stats.lastCorrect}/${stats.lastTotal} ${mark} · ${libraryDate(stats.lastAt)}`;
+  if (!stats.count) return '未挑戦';
+  return `${stats.count}回挑戦`;
 }
 
 function libraryKey(item) { return `${item.kind}:${item.chatId}:${item.messageId || ''}`; }
@@ -788,7 +795,7 @@ async function openLibraryItem(item) {
     note.className = 'library-meta';
     note.textContent = `${message.quiz.items.length}問 · 最初から解けます（記録は保存されます）`;
     quizHost.append(note);
-    quizHost.append(quizElement(message, { chatId: item.chatId, source: 'library', fresh: true }));
+    quizHost.append(quizElement(message, { chatId: item.chatId, source: 'library', fresh: true, session: crypto.randomUUID() }));
   } catch (error) { showToast(error.message); }
 }
 
