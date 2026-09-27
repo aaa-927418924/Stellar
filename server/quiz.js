@@ -59,7 +59,7 @@ export function legacyAttempt(message) {
   const total = message?.quiz?.items?.length || 0;
   const keys = Object.keys(results);
   if (total === 0 || keys.length === 0) return null;
-  const items = message.quiz.items.map((_, index) => !!results[index]?.lastOk);
+  const items = message.quiz.items.map((_, index) => results[index]?.attempts ? !!results[index].lastOk : null);
   return {
     n: 1,
     at: message.at || new Date(0).toISOString(),
@@ -83,4 +83,17 @@ export function aggregateAttempts(attempts) {
     lastTotal: last.total,
     lastAt: last.at
   };
+}
+
+export function reviewIndices(message) {
+  const quiz = message?.quiz;
+  if (!quiz?.items?.length) return [];
+  const attempts = quiz.attempts?.length ? quiz.attempts : [legacyAttempt(message)].filter(Boolean);
+  return quiz.items.flatMap((_, index) => {
+    for (let i = attempts.length - 1; i >= 0; i--) {
+      const result = attempts[i].items?.[index];
+      if (result === true || result === false) return result ? [] : [index];
+    }
+    return [];
+  });
 }

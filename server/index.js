@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { Store } from './store.js';
 import { buildPrompt, extractHtml } from './prompts.js';
-import { aggregateAttempts, judgeAnswer, legacyAttempt, parseQuiz } from './quiz.js';
+import { aggregateAttempts, judgeAnswer, legacyAttempt, parseQuiz, reviewIndices } from './quiz.js';
 import { runOpenCode, listModels, findOpenCode, DEFAULT_MODEL } from './opencode.js';
 import { appendProgress, progressFromEvent } from './progress.js';
 
@@ -248,7 +248,7 @@ export async function createServer() {
           for (const message of chat.messages) {
             if (message.quiz?.items?.length) {
               const attempts = Array.isArray(message.quiz.attempts) ? message.quiz.attempts : [];
-              const display = attempts.length > 0 ? attempts : (() => { const legacy = legacyAttempt(message); return legacy ? [legacy] : []; })();
+               const display = attempts.length > 0 ? attempts.filter(entry => entry.source !== 'review') : (() => { const legacy = legacyAttempt(message); return legacy ? [legacy] : []; })();
               items.push({
                 kind: 'quiz', chatId: chat.id, messageId: message.id, title: chat.title,
                 at: message.at, summary: message.quiz.summary || '',
@@ -258,6 +258,17 @@ export async function createServer() {
           }
         }
         items.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+        return json(res, 200, items);
+      }
+      if (req.method === 'GET' && url.pathname === '/api/review') {
+        const items = [];
+        for (const chat of await store.list()) {
+          for (const message of chat.messages) {
+            for (const index of reviewIndices(message)) {
+              items.push({ chatId: chat.id, messageId: message.id, index, title: chat.title, question: message.quiz.items[index].q });
+            }
+          }
+        }
         return json(res, 200, items);
       }
       if (req.method === 'PUT' && url.pathname === '/api/settings') {
@@ -303,25 +314,21 @@ export async function createServer() {
           const migrated = legacyAttempt(message);
           if (migrated) attempts.push(migrated);
         }
-        const finishedItems = message.quiz.items.map((_, i) => {
-          if (i === index) return ok;
-          const prev = message.quiz.results[i];
-          return prev ? !!prev.lastOk : null;
-        });
-        const latest = attempts[attempts.length - 1];
-        if (session && latest && latest.session === session) {
-          latest.at = new Date().toISOString();
-          latest.correct = finishedItems.filter(Boolean).length;
-          latest.items = finishedItems;
+        const ongoing = session && attempts.find(entry => entry.session === session && entry.source === source);
+        if (ongoing) {
+          ongoing.items = message.quiz.items.map((_, i) => i === index ? ok : (ongoing.items?.[i] ?? null));
+          ongoing.at = new Date().toISOString();
+          ongoing.correct = ongoing.items.filter(value => value === true).length;
         } else {
+          const items = message.quiz.items.map((_, i) => i === index ? ok : null);
           attempts.push({
             n: attempts.length + 1,
             at: new Date().toISOString(),
             source,
             session: session || undefined,
             total: message.quiz.items.length,
-            correct: finishedItems.filter(Boolean).length,
-            items: finishedItems
+            correct: items.filter(value => value === true).length,
+            items
           });
         }
         const results = { ...message.quiz.results, [index]: entry };

@@ -13,7 +13,7 @@ function saveOrganizedSeen() {
   } catch { /* ignore */ }
 }
 
-const state = { chats: [], current: null, chatMenuTarget: null, library: [], libraryPage: 0, librarySelected: null, organizedSeen: loadOrganizedSeen(), organizeArmed: [], submitting: false, polling: false, attachments: [], mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
+const state = { chats: [], current: null, chatMenuTarget: null, library: [], libraryPage: 0, librarySelected: null, review: null, organizedSeen: loadOrganizedSeen(), organizeArmed: [], submitting: false, polling: false, attachments: [], mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
 
 function clampPane(value, min, max) { return Math.min(max, Math.max(min, value)); }
 
@@ -265,6 +265,7 @@ function quizElement(message, options = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'quiz';
   message.quiz.items.forEach((item, index) => {
+    if (options.indices && !options.indices.includes(index)) return;
     const block = document.createElement('div');
     block.className = 'quiz-item';
     const head = document.createElement('div');
@@ -325,7 +326,7 @@ function quizElement(message, options = {}) {
         }
         input.disabled = true;
         if (options.onJudged) {
-          try { await options.onJudged(); }
+          try { await options.onJudged(response); }
           catch (error) { showToast(error.message); }
         }
       } catch (error) {
@@ -531,6 +532,7 @@ function render() {
 async function openChat(id) {
   state.current = await api(`/api/chats/${id}`);
   $('libraryView').hidden = true;
+  $('reviewView').hidden = true;
   $('contentGrid').hidden = false;
   state.mobileTab = 'chat';
   state.previewOpen = true;
@@ -542,6 +544,7 @@ async function openChat(id) {
 function newChat() {
   state.current = null;
   $('libraryView').hidden = true;
+  $('reviewView').hidden = true;
   $('contentGrid').hidden = false;
   document.title = 'Study App';
   state.mobileTab = 'chat';
@@ -659,6 +662,21 @@ $('messageInput').addEventListener('keydown', event => {
 });
 $('newChat').addEventListener('click', newChat);
 $('libraryButton').addEventListener('click', openLibrary);
+$('reviewButton').addEventListener('click', openReview);
+$('reviewBack').addEventListener('click', openReview);
+$('reviewStart').addEventListener('click', () => {
+  if (!state.review?.items.length) return;
+  state.review.session = crypto.randomUUID();
+  state.review.position = 0;
+  state.review.correct = 0;
+  renderReviewQuestion();
+});
+$('reviewNext').addEventListener('click', () => {
+  if (!state.review || $('reviewNext').hidden) return;
+  state.review.position++;
+  if (state.review.position < state.review.items.length) renderReviewQuestion();
+  else finishReview();
+});
 $('libraryPrev').addEventListener('click', () => { state.libraryPage--; renderLibrary(); });
 $('libraryNext').addEventListener('click', () => { state.libraryPage++; renderLibrary(); });
 $('fileInput').addEventListener('change', event => {
@@ -766,6 +784,93 @@ if (hostView) {
 
 const LIBRARY_PAGE_SIZE = 16;
 
+async function openReview() {
+  closeChatMenu();
+  const request = crypto.randomUUID();
+  state.reviewRequest = request;
+  state.review = null;
+  $('contentGrid').hidden = true;
+  $('libraryView').hidden = true;
+  $('mobileTabs').hidden = true;
+  $('reviewView').hidden = false;
+  $('topTitle').textContent = '復習';
+  $('sidebar').classList.remove('open');
+  $('reviewTitle').textContent = '復習';
+  $('reviewIntro').textContent = '復習する問題を確認しています…';
+  $('reviewContent').replaceChildren();
+  $('reviewBack').hidden = true;
+  $('reviewStart').hidden = true;
+  $('reviewNext').hidden = true;
+  try {
+    const items = await api('/api/review');
+    if ($('reviewView').hidden || state.reviewRequest !== request) return;
+    state.review = { items, session: null, position: 0, correct: 0 };
+    $('reviewIntro').textContent = items.length ? `復習する問題：${items.length}問` : '復習する問題はありません。';
+    if (!items.length) return;
+    const list = document.createElement('ol');
+    list.className = 'review-list';
+    for (const item of items) {
+      const row = document.createElement('li');
+      const title = document.createElement('strong');
+      title.textContent = item.title;
+      const question = document.createElement('span');
+      question.textContent = item.question;
+      row.append(title, question);
+      list.append(row);
+    }
+    $('reviewContent').append(list);
+    $('reviewStart').hidden = false;
+  } catch (error) {
+    $('reviewIntro').textContent = '復習する問題を読み込めませんでした。';
+    showToast(error.message);
+  }
+}
+
+async function renderReviewQuestion() {
+  const review = state.review;
+  const item = review.items[review.position];
+  $('reviewTitle').textContent = `復習 ${review.position + 1} / ${review.items.length}`;
+  $('reviewIntro').textContent = item.title;
+  $('reviewContent').replaceChildren();
+  $('reviewBack').hidden = false;
+  $('reviewStart').hidden = true;
+  $('reviewNext').hidden = true;
+  try {
+    const chat = await api(`/api/chats/${item.chatId}`);
+    if (state.review !== review || $('reviewView').hidden || review.items[review.position] !== item) return;
+    const message = chat.messages.find(entry => entry.id === item.messageId && entry.quiz);
+    if (!message) throw new Error('問題が見つかりません。');
+    $('reviewContent').append(quizElement(message, {
+      chatId: item.chatId, source: 'review', fresh: true, session: review.session, indices: [item.index],
+      onJudged: response => {
+        review.correct += Number(response.ok);
+        $('reviewNext').textContent = review.position + 1 === review.items.length ? '結果を見る' : '次の問題へ';
+        $('reviewNext').hidden = false;
+      }
+    }));
+  } catch (error) {
+    showToast(error.message);
+    $('reviewIntro').textContent = '問題を読み込めませんでした。';
+  }
+}
+
+async function finishReview() {
+  const review = state.review;
+  $('reviewTitle').textContent = '復習結果';
+  $('reviewIntro').textContent = `${review.items.length}問中 ${review.correct}問正解`;
+  $('reviewContent').replaceChildren();
+  $('reviewNext').hidden = true;
+  $('reviewBack').hidden = false;
+  try {
+    const remaining = await api('/api/review');
+    if (state.review !== review || $('reviewView').hidden) return;
+    const detail = document.createElement('p');
+    detail.className = 'review-summary';
+    detail.textContent = remaining.length ? `復習する問題はあと${remaining.length}問あります。` : '復習する問題はありません。';
+    $('reviewContent').append(detail);
+  } catch (error) { showToast(error.message); }
+}
+
 function libraryDate(at) {
   if (!at) return '';
   const date = new Date(at);
@@ -784,6 +889,7 @@ function libraryKey(item) { return `${item.kind}:${item.chatId}:${item.messageId
 
 async function openLibrary() {
   closeChatMenu();
+  $('reviewView').hidden = true;
   state.libraryPage = 0;
   state.librarySelected = null;
   $('contentGrid').hidden = true;

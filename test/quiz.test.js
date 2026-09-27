@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { aggregateAttempts, judgeAnswer, legacyAttempt, normalizeAnswer, parseQuiz } from '../server/quiz.js';
+import { aggregateAttempts, judgeAnswer, legacyAttempt, normalizeAnswer, parseQuiz, reviewIndices } from '../server/quiz.js';
 
 test('回答の表記ゆれを吸収する', () => {
   assert.equal(normalizeAnswer('  2  '), '2');
@@ -48,4 +48,17 @@ test('履歴の集計と移行ができる', () => {
   assert.equal(stats.lastAt, '2026-09-28T00:00:00.000Z');
   assert.deepEqual(aggregateAttempts([]), { count: 0, lastOk: false, lastCorrect: 0, lastTotal: 0, lastAt: null });
   assert.equal(legacyAttempt({ quiz: { items: [], results: {} } }), null);
+});
+
+test('復習対象は直近に回答した結果から選び、未回答を含めない', () => {
+  const quiz = { items: [{ q: 'A' }, { q: 'B' }, { q: 'C' }], results: {}, attempts: [
+    { source: 'initial', total: 3, items: [false, true, null] },
+    { source: 'library', total: 3, items: [true, null, false] }
+  ] };
+  assert.deepEqual(reviewIndices({ quiz }), [2]);
+  quiz.attempts.push({ source: 'review', total: 3, items: [null, null, true] });
+  assert.deepEqual(reviewIndices({ quiz }), []);
+  quiz.attempts.push({ source: 'library', total: 3, items: [false, null, null] });
+  assert.deepEqual(reviewIndices({ quiz }), [0]);
+  assert.deepEqual(reviewIndices({ quiz: { items: [{ q: 'A' }], results: {}, attempts: [] } }), []);
 });
