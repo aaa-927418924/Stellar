@@ -48,6 +48,8 @@ public sealed class MainForm : Form
     private readonly WebView2 view = new() { Dock = DockStyle.Fill };
     private Process? backend;
     private bool ownsBackend = true;
+    private AvailableUpdate? availableUpdate;
+    private bool installingUpdate;
 
     public MainForm()
     {
@@ -156,7 +158,11 @@ public sealed class MainForm : Form
             return;
         }
 
-        view.NavigationCompleted += (_, _) => PostMaxState();
+        view.NavigationCompleted += (_, _) =>
+        {
+            PostMaxState();
+            _ = CheckForUpdatesAsync();
+        };
         StartBackend(backendPath);
         var url = await WaitForLaunchUrlAsync(TimeSpan.FromSeconds(60));
         if (url == null)
@@ -256,6 +262,50 @@ public sealed class MainForm : Form
                 ReleaseCapture();
                 SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
                 break;
+            case "installUpdate":
+                _ = InstallUpdateAsync();
+                break;
+        }
+    }
+
+    private void PostUpdate(object message)
+    {
+        try { view.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(message)); }
+        catch { /* ウィンドウを閉じた後は無視 */ }
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        try
+        {
+            availableUpdate = await ReleaseUpdates.CheckAsync();
+            if (availableUpdate != null && !IsDisposed)
+                PostUpdate(new { type = "updateAvailable", version = availableUpdate.Version });
+        }
+        catch
+        {
+            // ネットワークが利用できないときは通常どおり起動する。
+        }
+    }
+
+    private async Task InstallUpdateAsync()
+    {
+        if (availableUpdate == null || installingUpdate) return;
+        installingUpdate = true;
+        string? staging = null;
+        try
+        {
+            PostUpdate(new { type = "updateStatus", text = "更新ファイルをダウンロードしています…" });
+            staging = await ReleaseUpdates.PrepareAsync(availableUpdate);
+            PostUpdate(new { type = "updateStatus", text = "更新して再起動します…" });
+            ReleaseUpdates.Apply(staging, Environment.ProcessId);
+            Close();
+        }
+        catch (Exception error)
+        {
+            if (staging != null) { try { Directory.Delete(staging, true); } catch { /* ignore */ } }
+            installingUpdate = false;
+            PostUpdate(new { type = "updateStatus", text = "更新できませんでした: " + error.Message, error = true });
         }
     }
 
@@ -263,7 +313,7 @@ public sealed class MainForm : Form
     {
         try
         {
-            view.CoreWebView2?.PostWebMessageAsString(
+            view.CoreWebView2?.PostWebMessageAsJson(
                 JsonSerializer.Serialize(new
                 {
                     type = "maxstate",

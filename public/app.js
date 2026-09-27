@@ -778,6 +778,11 @@ function postHostMessage(message) {
   try { if (hostView) window.chrome.webview.postMessage(message); } catch { /* ignore */ }
 }
 if (hostView) {
+  $('updateNotice').addEventListener('click', () => {
+    $('updateNotice').disabled = true;
+    $('updateNotice').textContent = '更新を準備しています…';
+    postHostMessage({ type: 'installUpdate' });
+  });
   $('windowControls').hidden = false;
   $('winMin').addEventListener('click', () => postHostMessage({ type: 'min' }));
   $('winMax').addEventListener('click', () => postHostMessage({ type: 'max' }));
@@ -793,6 +798,20 @@ if (hostView) {
   });
   window.chrome.webview.addEventListener('message', event => {
     const data = event.data || {};
+    if (data.type === 'updateAvailable') {
+      $('updateNotice').hidden = false;
+      $('updateNotice').disabled = false;
+      $('updateNotice').textContent = `新しいバージョン ${data.version} · 更新する`;
+      return;
+    }
+    if (data.type === 'updateStatus') {
+      $('updateNotice').textContent = data.text;
+      if (data.error) {
+        $('updateNotice').disabled = false;
+        showToast(data.text);
+      }
+      return;
+    }
     if (data.type !== 'maxstate') return;
     const maximized = !!data.maximized;
     $('winMax').setAttribute('aria-label', maximized ? '元に戻す' : '最大化');
