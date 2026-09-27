@@ -1,74 +1,100 @@
+![Stellar icon](window/StudyWindow/app.ico)
+
 # Stellar
 
-**学びたいことを、触って学べる教材に。** Stellar は OpenCode CLI を使って、質問からインタラクティブな HTML 教材や問題を作る Windows 向けのローカル学習アプリです。教材を操作しながらチャットで質問し、解いた問題を後から復習できます。
+A local Windows study app that turns questions into interactive lessons and quizzes with the OpenCode CLI.
 
-## できること
+Describe a topic you want to learn, explore the generated HTML lesson, ask follow-up questions, and revisit what you learned through a quiz library and daily review.
 
-- **教材を作る・質問する** — 学年や学びたい内容を伝えて教材を生成。プレビューを見ながら追加の質問や教材の更新ができます。質問だけのチャットも作れます。
-- **問題を解く** — チャット内で作った問題に解答し、正誤と解答履歴を記録します。
-- **ライブラリで解き直す** — 作成済みの教材・問題セットを一覧し、以前の回答が入力されていない状態から再挑戦できます。
-- **復習する** — 「今日の復習」は解答履歴と経過日数から問題を選びます。完了後の「もっと復習」は繰り返し利用でき、AIによる類題の追加も選べます。
-- **学習を続ける** — チャットのピン留め、ファイル添付、教材HTMLの保存、生成中の経過表示に対応しています。
-- **アプリを更新する** — デスクトップ版は GitHub Releases の最新版を自動確認。新しいバージョンがある場合、サイドバー左下からダウンロード・入れ替え・再起動できます。
+> [!NOTE]
+> Stellar is under development. Features and data formats may change in future versions.
+>
+> **The application interface is currently available in Japanese only.** There is no downloadable GitHub release yet.
 
-## 必要なもの
+## Features
 
-| 起動方法 | 必要な環境 |
+* Generate interactive HTML lessons from a chat prompt and revise them as you learn
+* Ask questions about a lesson or use a question-only chat
+* Create quizzes in chat, check answers, and keep an answer history
+* Revisit lessons and retry quizzes from the library with empty answer fields
+* Build a daily review from previous answers, with optional AI-generated variations
+* Start additional review sessions after finishing the daily review
+* Attach files, pin chats to the sidebar, and export lessons as standalone HTML files
+* Check GitHub Releases for desktop updates and update from the app when a newer version is available
+
+## What Makes Stellar Different
+
+### Lessons You Can Explore
+
+Stellar generates a self-contained HTML lesson that you can use alongside the conversation. You can interact with the lesson, ask for clarification, request changes, and save the HTML for use outside the app.
+
+### Practice Based on Your History
+
+Quiz answers are saved locally. The library lets you retry previous questions without carrying over earlier answers, while the daily review selects questions using your answer history and the time since you last practiced. You can turn AI-generated variations on or off.
+
+### Local Data Storage
+
+The app and its server run on your PC. Chat, lesson, and review data are stored separately from the executable:
+
+| How you run Stellar | Data folder |
 | --- | --- |
-| ソースから起動 | Windows、Node.js 20 以上、Microsoft Edge またはブラウザー |
-| デスクトップ版 | Windows、WebView2 Runtime。ビルド時のみ Node.js 20 以上と .NET 8 SDK |
+| Windows desktop executable | `%APPDATA%\StudyApp\data` |
+| From source | `data/` inside the repository |
 
-どちらも [OpenCode CLI](https://opencode.ai/docs/) と、利用するモデルの設定・認証が必要です。CLI が未導入なら `npm install -g opencode-ai` でインストールしてください。設定画面から利用するモデルを選べます。OpenCode 側でのモデル設定・認証は Stellar とは別に行います。
+The desktop folder keeps the previous app's name so existing study history remains available after upgrading. These folders are separate; running from source does not use the desktop app's history. The repository ignores `data/` and built files in `dist/`.
 
-## 起動する
+Stellar requires an internet connection for AI features. Prompts and attachments are sent to the provider of the model you select through OpenCode. Check important generated explanations and sources against other references.
 
-リポジトリをクローンした後、Windows で `start-stellar.cmd` をダブルクリックするか、リポジトリのディレクトリで次を実行します。
+## System Requirements
+
+* Windows 10 or Windows 11
+* [OpenCode CLI](https://opencode.ai/docs/) installed, with a model configured and authenticated (`npm install -g opencode-ai` if needed)
+* Node.js 20 or later and Microsoft Edge or another browser when running from source
+* Microsoft Edge WebView2 Runtime when running the desktop executable
+* Node.js 20 or later and .NET 8 SDK when building the desktop executable
+
+## Installation and Usage
+
+### Running from Source
 
 ```powershell
+git clone https://github.com/aaa-927418924/Stellar.git
+cd Stellar
 npm start
 ```
 
-ローカルサーバーが起動し、Edge のアプリウィンドウ（利用できない場合は既定ブラウザー）が開きます。コマンドウィンドウを閉じるとサーバーも終了します。通常の起動に `npm install` は不要です。
+You can also double-click `start-stellar.cmd`. No `npm install` is needed for a normal source run. Closing its console stops the local server. The app opens in an Edge app window if available, or in your default browser.
 
-タイトルバーのないデスクトップ版を手元でビルドする場合は、次の順に実行します。
+### Building the Windows Executable
 
 ```powershell
 npm run build:exe
 npm run build:window
 ```
 
-生成された `dist/Stellar/Stellar.exe` を起動してください。同じフォルダーにある `Stellar.Server.exe` も必要です。デスクトップ版のバックエンドはウィンドウの起動・終了に合わせて動作します。
+Run `dist\Stellar\Stellar.exe` with `Stellar.Server.exe` in the same folder. The desktop window starts and stops the bundled server automatically. OpenCode CLI and your chosen model's authentication are still required at runtime.
 
-## 使い方
+### Using Stellar
 
-1. 「新しいチャット」で、たとえば「中学2年生向けに一次関数を教えて」と入力し、「教材を作る」で送信します。ファイルは最大5件まで添付できます。
-2. 右側のプレビューで教材を操作します。「教材について質問」で内容を尋ねたり、「教材を更新」で作り直したりできます。教材は「HTMLを保存」で単独のファイルとして書き出せます。
-3. 問題を作って解答すると、履歴が残ります。左側の「ライブラリ」では問題を空欄から解き直せます。
-4. 「今日の復習」で過去の問題を復習します。1日1セッションで、完了後は「もっと復習」を何度でも始められます。「AI生成の類題を含める」は切り替え可能です。
+1. Create a chat and enter a request such as “Teach me linear functions for middle school.” Choose **教材を作る** to create a lesson. You can attach up to five files.
+2. Use the preview on the right. Choose **教材について質問** for a follow-up question or **教材を更新** to change the lesson. **HTMLを保存** exports it as a standalone file.
+3. Ask for practice questions and submit your answers. Open **ライブラリ** to retry saved quizzes from blank fields.
+4. Open **今日の復習** to review saved questions. Once complete, **もっと復習** lets you start additional sessions. You can choose whether to include AI-generated variations.
 
-チャット一覧の右クリックメニューからピン留め・解除ができます。生成はチャットを切り替えても続き、開いている間は進行状況が自動更新されます。「生成を中止」で中断できます。
+Right-click a chat in the sidebar to pin or unpin it. Generation continues when you switch chats, and you can cancel it from the chat view.
 
-## データと通信
+## Desktop Updates
 
-| 起動方法 | 会話・教材・復習履歴の保存先 |
-| --- | --- |
-| `npm start` / `start-stellar.cmd` | リポジトリ内の `data/` |
-| デスクトップ版 | `%APPDATA%\StudyApp\data` |
+On launch, the desktop app checks the latest published GitHub release. If it finds a newer version with a `Stellar-win-x64.zip` asset, an update button appears at the bottom of the sidebar. Clicking it downloads the ZIP, checks the app version, replaces the two executables after Stellar closes, and restarts the app. The install folder must be writable. No release or automatic download is required to run the current version; source runs do not show an update notice.
 
-デスクトップ版の保存先は旧アプリからの履歴を引き継ぐため、従来の名前のままです。`data/`、ビルド成果物の `dist/` は Git の管理対象外です。チャットや教材の履歴を消さずにソースを更新できます。
+For a future release, build both executables and run `scripts/build-release.ps1`. Attach the resulting `dist\Stellar-win-x64.zip` to a GitHub release tagged with the same version as `package.json`, for example `v0.37.0`. The ZIP must contain `Stellar.exe` and `Stellar.Server.exe` at its root.
 
-サーバーはローカルの `127.0.0.1` のみで待ち受けます。教材の生成・質問時には、入力文や添付ファイルが選択した OpenCode モデルの提供先へ送られます。生成された解説や出典の正しさは、必要に応じて参考資料でも確認してください。
-
-デスクトップ版は起動時に GitHub の公開リリースを確認します。更新は通知の「更新する」を押したときに始まり、アプリ終了後に実行ファイルを入れ替えて再起動します。インストール先への書き込み権限が必要です。ソースからの起動には更新通知は表示されません。
-
-## 開発
+## Development
 
 ```powershell
 npm test
 ```
 
-フロントエンドは素の HTML / CSS / JavaScript、バックエンドは Node.js 標準ライブラリの HTTP サーバーです。画面は `public/`、API と保存処理は `server/`、Windows ウィンドウは `window/StudyWindow/` にあります。教材プレビューは外部通信を制限した iframe で表示します。
+The frontend lives in `public/` (plain HTML, CSS, and JavaScript), the local Node.js API and storage logic in `server/`, and the WebView2 desktop window in `window/StudyWindow/`. The server listens on `127.0.0.1`; generated lessons are shown in a sandboxed iframe with network access restricted.
 
-サーバーだけを起動するには `STUDY_NO_BROWSER=1` を設定します。OpenCode CLI の実行ファイルを明示する場合は `STUDY_OPENCODE_EXE` に絶対パスを設定してください。
-
-将来リリースを作成する場合、タグを `v0.37.0` のようにバージョンと一致させ、ビルド後に `scripts/build-release.ps1` で生成した `dist/Stellar-win-x64.zip` を添付してください。ZIP の直下には `Stellar.exe` と `Stellar.Server.exe` が入ります。
+Set `STUDY_NO_BROWSER=1` to start only the server. Set `STUDY_OPENCODE_EXE` to an absolute path if OpenCode CLI is installed in a nonstandard location.
