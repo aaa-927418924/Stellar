@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { Store } from './store.js';
 import { buildPrompt, extractHtml } from './prompts.js';
 import { aggregateAttempts, judgeAnswer, legacyAttempt, parseQuiz } from './quiz.js';
-import { runOpenCode, listModels, findOpenCode, DEFAULT_MODEL } from './opencode.js';
+import { runOpenCode, listModels, findOpenCode, installOfficialOpenCode, DEFAULT_MODEL } from './opencode.js';
 import { appendProgress, progressFromEvent } from './progress.js';
 import { explanationPrompt, formatReviewExplanation, generatedCount, localDay, moreCandidates, moreGeneratedCount, newPlan, publicPlan, reviewCandidates, similarBases, similarPrompt } from './daily-review.js';
 
@@ -368,6 +368,12 @@ export async function createServer() {
       if (req.method === 'POST' && url.pathname === '/api/chats') return json(res, 201, await store.create());
       if (req.method === 'GET' && url.pathname === '/api/settings') {
         return json(res, 200, { ...(await store.settings()), opencodeOk: opencodeStatus.ok, opencodePath: opencodeStatus.path, version: appVersion });
+      }
+      if (req.method === 'POST' && url.pathname === '/api/opencode/install') {
+        const installed = await installOfficialOpenCode();
+        opencodeStatus = { ok: true, path: installed.path };
+        modelCache = { at: 0, models: [] };
+        return json(res, 200, installed);
       }
       if (req.method === 'GET' && url.pathname === '/api/models') {
         if (Date.now() - modelCache.at > 600_000) {

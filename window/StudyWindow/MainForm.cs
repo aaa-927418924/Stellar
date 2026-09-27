@@ -41,10 +41,12 @@ public sealed class MainForm : Form
     private const int HTBOTTOM = 15;
     private const int HTBOTTOMLEFT = 16;
     private const int HTBOTTOMRIGHT = 17;
+    private const int WM_SYSCOMMAND = 0x0112;
+    private const int SC_SIZE = 0xF000;
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int DWMWCP_ROUND = 2;
     private const int DWMWA_BORDER_COLOR = 34;
-    private const int ResizeGrip = 8;
+    private const int ResizeGrip = 12;
 
     private readonly WebView2 view = new() { Dock = DockStyle.Fill };
     private Process? backend;
@@ -79,8 +81,6 @@ public sealed class MainForm : Form
             DwmSetWindowAttribute(Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
             var border = 0x2B2B2B;
             DwmSetWindowAttribute(Handle, DWMWA_BORDER_COLOR, ref border, sizeof(int));
-            var margins = new Margins { Left = 1, Right = 1, Top = 1, Bottom = 1 };
-            DwmExtendFrameIntoClientArea(Handle, ref margins);
         }
         catch
         {
@@ -96,7 +96,8 @@ public sealed class MainForm : Form
             base.WndProc(ref message);
             if ((int)message.Result == 0 || (int)message.Result == 1) // HTNOWHERE / HTCLIENT
             {
-                var cursor = PointToClient(Cursor.Position);
+                var screen = new Point(unchecked((short)(long)message.LParam), unchecked((short)((long)message.LParam >> 16)));
+                var cursor = PointToClient(screen);
                 var left = cursor.X < ResizeGrip;
                 var right = cursor.X >= ClientSize.Width - ResizeGrip;
                 var top = cursor.Y < ResizeGrip;
@@ -144,10 +145,12 @@ public sealed class MainForm : Form
 
     private async Task InitializeAsync()
     {
-        string backendPath;
+        Task<string?> urlTask;
         try
         {
-            backendPath = await BackendPathAsync();
+            var backendPath = await BackendPathAsync();
+            StartBackend(backendPath);
+            urlTask = WaitForLaunchUrlAsync(TimeSpan.FromSeconds(60));
         }
         catch (Exception error)
         {
@@ -175,8 +178,7 @@ public sealed class MainForm : Form
             PostMaxState();
             _ = CheckForUpdatesAsync();
         };
-        StartBackend(backendPath);
-        var url = await WaitForLaunchUrlAsync(TimeSpan.FromSeconds(60));
+        var url = await urlTask;
         if (url == null)
         {
             Fail("バックエンドが起動しませんでした。");

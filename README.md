@@ -46,7 +46,7 @@ Stellar requires an internet connection for AI features. Prompts and attachments
 ## System Requirements
 
 * Windows 10 or Windows 11
-* [OpenCode CLI](https://opencode.ai/docs/) installed, with a model configured and authenticated (`npm install -g opencode-ai` if needed)
+* [OpenCode CLI](https://opencode.ai/) and an authenticated model provider. If the CLI is missing, Stellar can install the official Windows standalone CLI without Node.js or npm.
 * Node.js 20 or later and Microsoft Edge or another browser when running from source
 * Microsoft Edge WebView2 Runtime when running the desktop executable
 * Node.js 20 or later and .NET 8 SDK when building the desktop executable
@@ -70,7 +70,7 @@ npm run build:exe
 npm run build:window
 ```
 
-Run `dist\Stellar\Stellar.exe` by itself. It contains the server, extracts it into your local application data folder, and starts and stops it with the window. You can copy this single executable to another Windows PC with WebView2 Runtime installed. OpenCode CLI and your chosen model's authentication are still required for AI features.
+Run `dist\Stellar\Stellar.exe` by itself. It contains the server, extracts it into your local application data folder, and starts and stops it with the window. You can copy this single executable to another Windows PC with WebView2 Runtime installed. If OpenCode CLI is missing, select **公式OpenCode CLIをインストール** in the startup dialog. Stellar downloads the official standalone Windows CLI from the OpenCode GitHub release and installs it under `%LOCALAPPDATA%\Stellar\tools\opencode`; Node.js and npm are not needed. Configure and authenticate a model provider in OpenCode before generating lessons.
 
 ### Using Stellar
 
@@ -85,7 +85,7 @@ Right-click a chat in the sidebar to pin or unpin it. Generation continues when 
 
 On launch, the desktop app checks the latest published GitHub release. If it finds a newer version with a `Stellar-win-x64.zip` asset, an update button appears at the bottom of the sidebar. Clicking it downloads the ZIP, checks the app version, replaces the executable after Stellar closes, and restarts the app. The install folder must be writable. No release or automatic download is required to run the current version; source runs do not show an update notice.
 
-For a future release, run both build commands and then `scripts/build-release.ps1`. Attach the resulting `dist\Stellar-win-x64.zip` to a GitHub release tagged with the same version as `package.json`, for example `v0.38.0`. The ZIP contains only `Stellar.exe` at its root.
+For a future release, run both build commands and then `scripts/build-release.ps1`. Attach the resulting `dist\Stellar-win-x64.zip` to a GitHub release tagged with the same version as `package.json`, for example `v0.40.0`. The ZIP contains only `Stellar.exe` at its root.
 
 ## Development
 

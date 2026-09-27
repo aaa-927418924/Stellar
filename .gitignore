@@ -1,6 +1,7 @@
 data/
 node_modules/
 dist/
+.stellar-build-stage/
 window/*/bin/
 window/*/obj/
 *.log

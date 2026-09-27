@@ -1,6 +1,12 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { copyFile, mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
+import { promisify } from 'node:util';
+import { execFile } from 'node:child_process';
+
+const execFileAsync = promisify(execFile);
 
 function command() {
   return findOpenCodeSync() || 'opencode';
@@ -11,6 +17,7 @@ function candidatePaths() {
   if (process.env.STUDY_OPENCODE_EXE) paths.push(process.env.STUDY_OPENCODE_EXE);
   if (process.platform === 'win32') {
     paths.push(path.join(process.env.APPDATA || '', 'npm', 'node_modules', 'opencode-ai', 'bin', 'opencode.exe'));
+    paths.push(path.join(process.env.LOCALAPPDATA || '', 'Stellar', 'tools', 'opencode', 'opencode.exe'));
   }
   return paths;
 }
@@ -34,6 +41,55 @@ export function findOpenCode() {
     if (first) return first;
   } catch { /* ignore */ }
   return null;
+}
+
+export async function installOfficialOpenCode() {
+  if (process.platform !== 'win32') throw new Error('このインストーラーはWindows専用です。');
+  const releaseResponse = await fetch('https://api.github.com/repos/anomalyco/opencode/releases/latest', {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Stellar-OpenCode-Installer' }, signal: AbortSignal.timeout(20_000)
+  });
+  if (!releaseResponse.ok) throw new Error(`OpenCodeの最新版を確認できませんでした（HTTP ${releaseResponse.status}）。`);
+  const release = await releaseResponse.json();
+  const asset = release.assets?.find(entry => entry.name === 'opencode-windows-x64.zip');
+  if (!asset || !/^v?\d+\.\d+\.\d+/.test(release.tag_name || '')) throw new Error('公式配布ファイルが見つかりません。');
+  const assetUrl = new URL(asset.browser_download_url);
+  if (assetUrl.protocol !== 'https:' || assetUrl.hostname !== 'github.com') throw new Error('配布元を確認できません。');
+  if (asset.size > 120_000_000) throw new Error('OpenCodeの配布ファイルが上限サイズを超えています。');
+  const staging = await mkdtemp(path.join(os.tmpdir(), 'stellar-opencode-'));
+  try {
+    const archive = path.join(staging, 'opencode.zip');
+    const response = await fetch(assetUrl, { signal: AbortSignal.timeout(180_000) });
+    if (!response.ok || !response.body) throw new Error('OpenCodeのダウンロードに失敗しました。');
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > 120_000_000 || (asset.size && bytes.length !== asset.size)) throw new Error('ダウンロードしたファイルのサイズが一致しません。');
+    await writeFile(archive, bytes);
+    const extract = path.join(staging, 'extract');
+    await mkdir(extract);
+    const script = path.join(staging, 'extract.ps1');
+    await writeFile(script, 'param([string]$Archive,[string]$Destination)\n$ErrorActionPreference="Stop"\nExpand-Archive -LiteralPath $Archive -DestinationPath $Destination -Force\n', 'utf8');
+    await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, archive, extract], { timeout: 120_000, windowsHide: true });
+    const findExe = async dir => {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isFile() && entry.name.toLowerCase() === 'opencode.exe') return full;
+        if (entry.isDirectory()) { const found = await findExe(full); if (found) return found; }
+      }
+      return null;
+    };
+    const executable = await findExe(extract);
+    if (!executable) throw new Error('ZIP内にOpenCode CLIがありません。');
+    const result = await execFileAsync(executable, ['--version'], { timeout: 20_000, windowsHide: true });
+    if (!result.stdout.trim().startsWith(release.tag_name.replace(/^v/, ''))) throw new Error('OpenCodeのバージョン確認に失敗しました。');
+    const targetDir = path.join(process.env.LOCALAPPDATA || os.homedir(), 'Stellar', 'tools', 'opencode');
+    await mkdir(targetDir, { recursive: true });
+    const target = path.join(targetDir, 'opencode.exe');
+    const temporary = `${target}.${process.pid}.tmp`;
+    await copyFile(executable, temporary);
+    await rename(temporary, target);
+    return { path: target, version: result.stdout.trim() };
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
 }
 
 export const DEFAULT_MODEL = 'opencode/muse-spark-1.3-contributor-free';

@@ -726,6 +726,22 @@ $('pinChatButton').addEventListener('click', async () => {
     document.querySelector(`[data-chat-id="${target.id}"]`)?.focus();
   } catch (error) { showToast(error.message); }
 });
+
+$('installOpenCodeButton').addEventListener('click', async () => {
+  const button = $('installOpenCodeButton');
+  const status = $('openCodeInstallStatus');
+  button.disabled = true;
+  status.textContent = 'OpenCode公式配布元からダウンロードしてインストールしています…';
+  try {
+    const installed = await api('/api/opencode/install', { method: 'POST', body: '{}' });
+    state.openCodeInstalled = true;
+    $('opencodeDialog').close();
+    showToast(`OpenCode ${installed.version} をインストールしました。`);
+  } catch (error) {
+    status.textContent = error.message;
+    button.disabled = false;
+  }
+});
 document.addEventListener('click', event => {
   if (!event.target.closest('#chatMenu')) closeChatMenu();
 });
