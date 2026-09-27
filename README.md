@@ -1,10 +1,10 @@
-# Study App
+# Stellar
 
 学びたい内容をチャットで伝えると、OpenCode CLI を使ってインタラクティブな単一 HTML 教材を作るローカルアプリです。教材を画面右側で操作しながら、その内容をチャットで質問できます。
 
 ## 起動
 
-Windows では [start-study.cmd](start-study.cmd) をダブルクリックしてください。Node.js 20 以上、OpenCode CLI、OpenCode で利用できるモデルの認証が必要です。OpenCode CLIが見つからない場合は起動時に案内ダイアログが表示されます（`npm install -g opencode-ai` で導入できます）。起動後、Edge のアプリウィンドウが開きます。黒いコンソールを閉じるとローカルサーバーも終了します。
+Windows では [start-stellar.cmd](start-stellar.cmd) をダブルクリックしてください。Node.js 20 以上、OpenCode CLI、OpenCode で利用できるモデルの認証が必要です。OpenCode CLIが見つからない場合は起動時に案内ダイアログが表示されます（`npm install -g opencode-ai` で導入できます）。起動後、Edge のアプリウィンドウが開きます。黒いコンソールを閉じるとローカルサーバーも終了します。
 
 ブラウザーのウィンドウだけを閉じても、コンソールが開いている間は生成が続きます。再度ランチャーを開くと、実行中のアプリへ接続します。終了時は起動情報を破棄します。古い起動情報が残っていても、次回起動時に生存確認のうえ上書きします。
 
@@ -15,9 +15,9 @@ npm run build:exe
 npm run build:window
 ```
 
-`dist/StudyApp/StudyApp.exe` をダブルクリックで起動します。タイトルバーのない専用ウィンドウ（WebView2）が開き、右上のボタンで最小化・最大化・閉じるを操作できます。バックエンド（`StudyApp.Server.exe`、Node.js同梱）は自動で起動・終了します。.NET 8 Desktop ランタイム、OpenCode CLI、モデルの認証が必要です。特別な実行ファイルを使う場合は `STUDY_OPENCODE_EXE` を設定します。
+`dist/Stellar/Stellar.exe` をダブルクリックで起動します。タイトルバーのない専用ウィンドウ（WebView2）が開き、右上のボタンで最小化・最大化・閉じるを操作できます。バックエンド（`Stellar.Server.exe`、Node.js同梱）は自動で起動・終了します。.NET 8 Desktop ランタイム、OpenCode CLI、モデルの認証が必要です。特別な実行ファイルを使う場合は `STUDY_OPENCODE_EXE` を設定します。
 
-exe版の会話と教材は `%APPDATA%\StudyApp\data` に保存されます（開発時の `npm start` はリポジトリ内の `data/` を使うため、履歴は共有されません）。
+exe版の会話と教材は、以前の履歴を引き続き使うため `%APPDATA%\StudyApp\data` に保存されます（開発時の `npm start` はリポジトリ内の `data/` を使うため、履歴は共有されません）。
 
 ```powershell
 cd 'C:\Users\PC_User\Documents\Codex Projects\Study App'

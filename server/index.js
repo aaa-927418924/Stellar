@@ -15,6 +15,7 @@ import { explanationPrompt, formatReviewExplanation, generatedCount, localDay, m
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
 const packaged = /[\\/]caxa[\\/]/.test(process.argv[1] || '') || /[\\/]caxa[\\/]/.test(process.execPath);
+// 旧アプリ名の保存先を維持し、改名後もチャット・教材・復習履歴を共有する。
 const dataRoot = packaged && process.env.APPDATA
   ? path.join(process.env.APPDATA, 'StudyApp', 'data')
   : path.join(root, 'data');
@@ -518,6 +519,7 @@ async function runningInstance() {
   try {
     const instance = JSON.parse(await readFile(instancePath, 'utf8'));
     if (!Number.isInteger(instance.port) || instance.port < 1 || instance.port > 65535 || !/^[0-9a-f]{64}$/.test(instance.secret)) return null;
+    if (instance.version !== appVersion) return null;
     const url = `http://127.0.0.1:${instance.port}/?launch=${instance.secret}`;
     const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(1200) });
     return response.status === 302 ? url : null;
@@ -538,7 +540,7 @@ async function main() {
   if (!found) console.error('OpenCode CLIが見つかりません。教材生成には `npm install -g opencode-ai` が必要です。');
   const existing = await runningInstance();
   if (existing) {
-    console.log('Study App は既に起動しています。既存のウィンドウを開きます。');
+    console.log('Stellar は既に起動しています。既存のウィンドウを開きます。');
     openWindow(existing);
     return;
   }
@@ -549,8 +551,8 @@ async function main() {
   server.listen(0, '127.0.0.1', async () => {
     const address = server.address();
     const url = `http://127.0.0.1:${address.port}/?launch=${launchSecret}`;
-    await writeFile(instancePath, JSON.stringify({ pid: process.pid, port: address.port, secret: launchSecret }), { mode: 0o600 });
-    console.log(`Study App: http://127.0.0.1:${address.port}/`);
+    await writeFile(instancePath, JSON.stringify({ pid: process.pid, port: address.port, secret: launchSecret, version: appVersion }), { mode: 0o600 });
+    console.log(`Stellar: http://127.0.0.1:${address.port}/`);
     openWindow(url);
   });
 }

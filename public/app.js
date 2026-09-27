@@ -547,7 +547,7 @@ function newChat() {
   $('libraryView').hidden = true;
   $('reviewView').hidden = true;
   $('contentGrid').hidden = false;
-  document.title = 'Study App';
+  document.title = 'Stellar';
   state.mobileTab = 'chat';
   state.previewOpen = true;
   state.progressOpen = true;
@@ -1135,7 +1135,7 @@ async function poll() {
     if (finishedElsewhere) {
       const outcome = finishedElsewhere.lastMessageFailed ? '生成が終了しました。履歴を確認してください。' : '処理が完了しました。';
       showToast(`「${finishedElsewhere.title}」${outcome}`);
-      document.title = `${finishedElsewhere.lastMessageFailed ? '!' : '✓'} ${outcome} · Study App`;
+      document.title = `${finishedElsewhere.lastMessageFailed ? '!' : '✓'} ${outcome} · Stellar`;
     }
     const listing = state.chats.find(chat => chat.id === id);
     if (id && listing?.updatedAt !== state.current.updatedAt) {
@@ -1149,7 +1149,7 @@ async function poll() {
         const last = next.messages.at(-1);
         if (last?.failed) showToast(last.text);
         else {
-          document.title = `✓ ${previousAction === 'ask' ? '回答' : '教材'}が完成しました · Study App`;
+          document.title = `✓ ${previousAction === 'ask' ? '回答' : '教材'}が完成しました · Stellar`;
           showToast(previousAction === 'ask' ? '回答が届きました。' : '教材が完成しました。');
         }
       }

@@ -6,8 +6,10 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>StudyApp</AssemblyName>
-    <Version>0.33.0</Version>
+    <AssemblyName>Stellar</AssemblyName>
+    <Product>Stellar</Product>
+    <Title>Stellar</Title>
+    <Version>0.34.0</Version>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

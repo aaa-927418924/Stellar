@@ -4,11 +4,11 @@ import { spawnSync } from 'node:child_process';
 // identifierにバージョンを含める。caxaはidentifierごとに展開先を決めるため、
 // 同じidentifierのまま更新すると古い展開済みコードが使われ続けてしまう。
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-const identifier = `study-app-v${pkg.version}`;
+const identifier = `stellar-v${pkg.version}`;
 const args = [
   '-y', 'caxa@3.0.1',
   '--input', '.',
-  '--output', 'dist/StudyApp/StudyApp.Server.exe',
+  '--output', 'dist/Stellar/Stellar.Server.exe',
   '--identifier', identifier,
   '--exclude', 'data/**',
   '--exclude', '.git/**',

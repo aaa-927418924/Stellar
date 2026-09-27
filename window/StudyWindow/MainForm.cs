@@ -51,7 +51,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "Study App";
+        Text = "Stellar";
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(1320, 850);
         MinimumSize = new Size(900, 600);
@@ -115,7 +115,7 @@ public sealed class MainForm : Form
     private static string BackendPath()
     {
         var dir = AppContext.BaseDirectory;
-        var backend = Path.Combine(dir, "StudyApp.Server.exe");
+        var backend = Path.Combine(dir, "Stellar.Server.exe");
         if (File.Exists(backend)) return backend;
         throw new FileNotFoundException("バックエンドが見つかりません: " + backend);
     }
@@ -123,6 +123,7 @@ public sealed class MainForm : Form
     private static string InstancePath()
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        // バックエンドの既存データ保存先と揃える。
         return Path.Combine(appData, "StudyApp", "data", "instance.json");
     }
 
@@ -141,6 +142,7 @@ public sealed class MainForm : Form
 
         try
         {
+            // WebView2の下書き等も旧アプリから引き継ぐ。
             var dataDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "StudyApp", "webview");
@@ -204,6 +206,12 @@ public sealed class MainForm : Form
                 var json = await File.ReadAllTextAsync(InstancePath());
                 using var document = JsonDocument.Parse(json);
                 var root = document.RootElement;
+                var version = typeof(MainForm).Assembly.GetName().Version?.ToString(3);
+                if (!root.TryGetProperty("version", out var currentVersion) || currentVersion.GetString() != version)
+                {
+                    await Task.Delay(500);
+                    continue;
+                }
                 var port = root.GetProperty("port").GetInt32();
                 var secret = root.GetProperty("secret").GetString();
                 var url = $"http://127.0.0.1:{port}/?launch={secret}";
@@ -308,7 +316,7 @@ public sealed class MainForm : Form
 
     private void Fail(string message)
     {
-        MessageBox.Show(this, message, "Study App", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        MessageBox.Show(this, message, "Stellar", MessageBoxButtons.OK, MessageBoxIcon.Error);
         BeginInvoke(Application.Exit);
     }
 }

@@ -1,4 +1,4 @@
-# Study App 実装計画
+# Stellar 実装計画
 
 ## 目的
 

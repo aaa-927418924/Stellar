@@ -1,5 +1,5 @@
 @echo off
-title Study App
+title Stellar
 cd /d "%~dp0"
 where node >nul 2>nul
 if errorlevel 1 (
@@ -15,6 +15,6 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-echo Starting Study App. Close this window to stop the server.
+echo Starting Stellar. Close this window to stop the server.
 node server\index.js
 if errorlevel 1 pause

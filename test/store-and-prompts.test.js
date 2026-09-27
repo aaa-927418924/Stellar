@@ -13,7 +13,7 @@ test('教材HTMLだけを取り出し、不完全な応答は拒否する', () =
 });
 
 test('会話と教材を再読込でき、別のチャットは混ざらない', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'study-app-test-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'stellar-test-'));
   try {
     const store = new Store(root);
     await store.init();
@@ -62,7 +62,7 @@ test('質問の指示には現在の教材が含まれる', () => {
 
 test('添付ファイルをバイナリのまま保存・取得・削除する', async () => {
   const { randomUUID } = await import('node:crypto');
-  const root = await mkdtemp(path.join(os.tmpdir(), 'study-app-attach-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'stellar-attach-'));
   try {
     const store = new Store(root);
     await store.init();
