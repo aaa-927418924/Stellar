@@ -7,9 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { Store } from './store.js';
 import { buildPrompt, extractHtml } from './prompts.js';
-import { aggregateAttempts, judgeAnswer, legacyAttempt, parseQuiz, reviewIndices } from './quiz.js';
+import { aggregateAttempts, judgeAnswer, legacyAttempt, parseQuiz } from './quiz.js';
 import { runOpenCode, listModels, findOpenCode, DEFAULT_MODEL } from './opencode.js';
 import { appendProgress, progressFromEvent } from './progress.js';
+import { explanationPrompt, formatReviewExplanation, generatedCount, localDay, newPlan, publicPlan, reviewCandidates, similarBases, similarPrompt } from './daily-review.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
@@ -23,6 +24,7 @@ let appVersion = '';
 try { appVersion = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version || ''; } catch { /* ignore */ }
 const launchSecret = randomBytes(32).toString('hex');
 const active = new Map();
+const preparingReviews = new Map();
 const MAX_BODY = 60_000_000;
 const MAX_ATTACHMENTS = 5;
 let modelCache = { at: 0, models: [] };
@@ -89,6 +91,82 @@ export function attachmentFromPayload(payload) {
   const name = String(payload.name || 'file').slice(0, 120);
   const extension = ((/\.([A-Za-z0-9]{1,10})$/.exec(name) || [])[1] || 'bin').toLowerCase();
   return { bytes, extension, name, type: String(payload.type || '') };
+}
+
+async function reviewAi(prompt) {
+  const promptFile = path.join(store.tmpDir, `${randomUUID()}.txt`);
+  await writeFile(promptFile, prompt, 'utf8');
+  try {
+    const model = (await store.settings()).model || DEFAULT_MODEL;
+    return await runOpenCode({ promptFile, model, cwd: root, signal: AbortSignal.timeout(180_000) });
+  } catch (error) {
+    throw Object.assign(new Error(`AIによる復習の準備に失敗しました。${String(error.message || '').slice(0, 250)}`), { status: 502 });
+  } finally { await unlink(promptFile).catch(() => {}); }
+}
+
+async function prepareReview(includeAi) {
+  const day = localDay();
+  const cached = await store.review(day, includeAi);
+  if (cached) return cached;
+  const key = `${day}:${includeAi}`;
+  if (preparingReviews.has(key)) return preparingReviews.get(key);
+  const task = (async () => {
+    const candidates = reviewCandidates(await store.list());
+    if (!candidates.length) throw Object.assign(new Error('まだ復習できる問題がありません。まずは問題を作成して解いてみましょう。'), { status: 409 });
+    const plan = newPlan({ candidates, includeAi });
+    const count = generatedCount(plan.items.length, includeAi);
+    if (count) {
+      const parsed = parseQuiz(await reviewAi(similarPrompt(plan.items, count)));
+      if (!parsed || parsed.items.length !== count || parsed.items.some(item => plan.items.some(original => original.quiz.q === item.q))) {
+        throw Object.assign(new Error('類題を確認できませんでした。もう一度準備してください。'), { status: 502 });
+      }
+      const bases = similarBases(plan.items, count);
+      parsed.items.forEach((quiz, index) => {
+        const base = bases[index % bases.length];
+        plan.items.splice(Math.min(plan.items.length, 2 + index * 4), 0, { kind: 'ai_review', source: 'ai_review', id: randomUUID(), title: base.title,
+          summary: base.summary, category: base.category, origin: { chatId: base.chatId, messageId: base.messageId, index: base.index }, quiz });
+      });
+    }
+    const description = formatReviewExplanation(await reviewAi(explanationPrompt(plan.items)), plan.items);
+    if (!description) throw Object.assign(new Error('復習内容の説明を生成できませんでした。'), { status: 502 });
+    plan.explanation = description;
+    plan.status = 'ready';
+    await store.saveReview(plan);
+    return plan;
+  })();
+  preparingReviews.set(key, task);
+  try { return await task; }
+  finally { preparingReviews.delete(key); }
+}
+
+async function recordQuizAnswer(chat, message, payload) {
+  const index = Number(payload.index);
+  const text = String(payload.text || '');
+  const source = ['initial', 'library', 'review'].includes(payload.source) ? payload.source : 'initial';
+  const session = /^[0-9a-f-]{36}$/i.test(payload.session || '') ? payload.session : null;
+  const item = message.quiz.items[index];
+  if (!Number.isInteger(index) || !item || !text.trim() || text.length > 500) throw Object.assign(new Error('回答は1～500文字で入力してください。'), { status: 400 });
+  const ok = judgeAnswer(text, item.answers);
+  const current = message.quiz.results[index] || { attempts: 0, correct: 0 };
+  const entry = { attempts: current.attempts + 1, correct: current.correct + (ok ? 1 : 0), lastOk: ok, lastAnswer: text };
+  const attempts = Array.isArray(message.quiz.attempts) ? [...message.quiz.attempts] : [];
+  if (attempts.length === 0) {
+    const migrated = legacyAttempt(message);
+    if (migrated) attempts.push(migrated);
+  }
+  const ongoing = session && attempts.find(attempt => attempt.session === session && attempt.source === source);
+  if (ongoing) {
+    ongoing.items = message.quiz.items.map((_, i) => i === index ? ok : (ongoing.items?.[i] ?? null));
+    ongoing.at = new Date().toISOString();
+    ongoing.correct = ongoing.items.filter(value => value === true).length;
+  } else {
+    const items = message.quiz.items.map((_, i) => i === index ? ok : null);
+    attempts.push({ n: attempts.length + 1, at: new Date().toISOString(), source, session: session || undefined,
+      total: message.quiz.items.length, correct: items.filter(value => value === true).length, items });
+  }
+  message.quiz = { ...message.quiz, results: { ...message.quiz.results, [index]: entry }, attempts };
+  await store.save(chat);
+  return { ok, attempts: entry.attempts, lastOk: ok, explanation: item.explanation, answer: item.answers[0] };
 }
 
 async function runJob({ chat, text, action, model, attachments, lesson, controller }) {
@@ -261,15 +339,40 @@ export async function createServer() {
         return json(res, 200, items);
       }
       if (req.method === 'GET' && url.pathname === '/api/review') {
-        const items = [];
-        for (const chat of await store.list()) {
-          for (const message of chat.messages) {
-            for (const index of reviewIndices(message)) {
-              items.push({ chatId: chat.id, messageId: message.id, index, title: chat.title, question: message.quiz.items[index].q });
-            }
-          }
+        const candidates = reviewCandidates(await store.list());
+        return json(res, 200, { existingCount: candidates.length, day: localDay() });
+      }
+      if (url.pathname === '/api/review/today' && req.method === 'GET') {
+        const plan = await store.review(localDay(), url.searchParams.get('ai') !== '0');
+        return json(res, 200, { plan: publicPlan(plan) });
+      }
+      if (url.pathname === '/api/review/today' && req.method === 'POST') {
+        const payload = await body(req);
+        const plan = await prepareReview(payload.includeAi !== false);
+        return json(res, 200, { plan: publicPlan(plan) });
+      }
+      if (url.pathname === '/api/review/today/answer' && req.method === 'POST') {
+        const payload = await body(req);
+        const plan = await store.review(localDay(), payload.includeAi !== false);
+        const index = Number(payload.index);
+        const text = String(payload.text || '');
+        if (!plan || payload.planId !== plan.id || !Number.isInteger(index) || !plan.items[index]) return fail(res, 404, '今日の復習が見つかりません。');
+        if (plan.results[index]) return fail(res, 409, 'この問題は回答済みです。');
+        if (!text.trim() || text.length > 500) return fail(res, 400, '回答は1～500文字で入力してください。');
+        const item = plan.items[index];
+        let result;
+        if (item.kind === 'existing') {
+          const chat = await store.get(item.chatId);
+          const message = chat?.messages.find(entry => entry.id === item.messageId && entry.quiz);
+          if (!message?.quiz.items[item.index]) return fail(res, 404, '元の問題が見つかりません。');
+          result = await recordQuizAnswer(chat, message, { index: item.index, text, source: 'review', session: plan.id });
+        } else {
+          const ok = judgeAnswer(text, item.quiz.answers);
+          result = { ok, answer: item.quiz.answers[0], explanation: item.quiz.explanation };
         }
-        return json(res, 200, items);
+        plan.results[index] = { ok: result.ok, text, at: new Date().toISOString(), source: item.kind === 'ai_review' ? 'ai_review' : 'review' };
+        await store.saveReview(plan);
+        return json(res, 200, result);
       }
       if (req.method === 'PUT' && url.pathname === '/api/settings') {
         const settings = await body(req);
@@ -297,44 +400,7 @@ export async function createServer() {
         const chat = await store.get(answerMatch[1]);
         const message = chat?.messages.find(item => item.id === answerMatch[2] && item.quiz);
         if (!message) return fail(res, 404, '問題が見つかりません。');
-        const payload = await body(req);
-        const index = Number(payload.index);
-        const text = String(payload.text || '');
-        const source = ['initial', 'library', 'review'].includes(payload.source) ? payload.source : 'initial';
-        const session = /^[0-9a-f-]{36}$/i.test(payload.session || '') ? payload.session : null;
-        const item = message.quiz.items[index];
-        if (!Number.isInteger(index) || !item || !text.trim() || text.length > 500) {
-          return fail(res, 400, '回答は1～500文字で入力してください。');
-        }
-        const ok = judgeAnswer(text, item.answers);
-        const current = message.quiz.results[index] || { attempts: 0, correct: 0 };
-        const entry = { attempts: current.attempts + 1, correct: current.correct + (ok ? 1 : 0), lastOk: ok, lastAnswer: text };
-        const attempts = Array.isArray(message.quiz.attempts) ? [...message.quiz.attempts] : [];
-        if (attempts.length === 0) {
-          const migrated = legacyAttempt(message);
-          if (migrated) attempts.push(migrated);
-        }
-        const ongoing = session && attempts.find(entry => entry.session === session && entry.source === source);
-        if (ongoing) {
-          ongoing.items = message.quiz.items.map((_, i) => i === index ? ok : (ongoing.items?.[i] ?? null));
-          ongoing.at = new Date().toISOString();
-          ongoing.correct = ongoing.items.filter(value => value === true).length;
-        } else {
-          const items = message.quiz.items.map((_, i) => i === index ? ok : null);
-          attempts.push({
-            n: attempts.length + 1,
-            at: new Date().toISOString(),
-            source,
-            session: session || undefined,
-            total: message.quiz.items.length,
-            correct: items.filter(value => value === true).length,
-            items
-          });
-        }
-        const results = { ...message.quiz.results, [index]: entry };
-        message.quiz = { items: message.quiz.items, results, attempts, summary: message.quiz.summary || '' };
-        await store.save(chat);
-        return json(res, 200, { ok, attempts: entry.attempts, lastOk: entry.lastOk, explanation: item.explanation, answer: item.answers[0] });
+        return json(res, 200, await recordQuizAnswer(chat, message, await body(req)));
       }
       const cancelMatch = /^\/api\/chats\/([0-9a-f-]{36})\/cancel$/.exec(url.pathname);
       if (req.method === 'POST' && cancelMatch) {

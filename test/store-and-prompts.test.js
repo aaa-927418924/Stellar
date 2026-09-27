@@ -35,6 +35,13 @@ test('会話と教材を再読込でき、別のチャットは混ざらない',
     await store.saveLesson(first.id, '<!doctype html><html>更新版</html>');
     assert.equal((await store.settings()).model, 'openai/example');
     assert.equal(await store.lesson(first.id), '<!doctype html><html>更新版</html>');
+    assert.equal(await store.review('2026-09-27', true), null);
+    const plan = { id: first.id, day: '2026-09-27', includeAi: true, items: [], results: {} };
+    await store.saveReview(plan);
+    plan.results[0] = { ok: true, source: 'ai_review' };
+    await store.saveReview(plan);
+    assert.deepEqual((await store.review('2026-09-27', true)).results[0], { ok: true, source: 'ai_review' });
+    assert.equal(await store.review('2026-09-27', false), null);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

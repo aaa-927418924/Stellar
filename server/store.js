@@ -24,10 +24,11 @@ export class Store {
     this.lessonsDir = path.join(root, 'lessons');
     this.tmpDir = path.join(root, 'tmp');
     this.attachmentsDir = path.join(root, 'attachments');
+    this.reviewsDir = path.join(root, 'reviews');
   }
 
   async init() {
-    await Promise.all([this.chatsDir, this.lessonsDir, this.tmpDir, this.attachmentsDir].map(dir => mkdir(dir, { recursive: true })));
+    await Promise.all([this.chatsDir, this.lessonsDir, this.tmpDir, this.attachmentsDir, this.reviewsDir].map(dir => mkdir(dir, { recursive: true })));
   }
 
   chatPath(id) {
@@ -129,5 +130,19 @@ export class Store {
 
   async saveSettings(settings) {
     await writeDocument(path.join(this.root, 'settings.json'), JSON.stringify(settings, null, 2));
+  }
+
+  reviewPath(day, includeAi) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error('復習日が不正です。');
+    return path.join(this.reviewsDir, `${day}-${includeAi ? 'ai' : 'existing'}.json`);
+  }
+
+  async review(day, includeAi) {
+    try { return JSON.parse(await readFile(this.reviewPath(day, includeAi), 'utf8')); }
+    catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  }
+
+  async saveReview(plan) {
+    await writeDocument(this.reviewPath(plan.day, plan.includeAi), JSON.stringify(plan, null, 2));
   }
 }

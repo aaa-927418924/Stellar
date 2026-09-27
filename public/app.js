@@ -291,11 +291,12 @@ function quizElement(message, options = {}) {
     input.maxLength = 500;
     input.placeholder = '答えを入力してEnter';
     input.autocomplete = 'off';
-    input.name = `quiz-${message.id}-${index}`;
+    input.name = `quiz-${message.id}-${index}-${session}`;
     input.setAttribute('aria-label', `問題${index + 1}の回答`);
     input.dataset.message = message.id;
     input.dataset.index = String(index);
     input.disabled = !!(results[index] && results[index].attempts > 0);
+    if (options.fresh) input.value = '';
     if (input.disabled && typeof results[index].lastAnswer === 'string') input.value = results[index].lastAnswer;
     if (source === 'initial') input.addEventListener('input', () => {
       quizDraftLive.set(quizDraftKey(message.id, index), input.value);
@@ -664,17 +665,18 @@ $('newChat').addEventListener('click', newChat);
 $('libraryButton').addEventListener('click', openLibrary);
 $('reviewButton').addEventListener('click', openReview);
 $('reviewBack').addEventListener('click', openReview);
+$('reviewIncludeAi').addEventListener('change', loadDailyPlan);
+$('reviewPrepare').addEventListener('click', prepareDailyPlan);
 $('reviewStart').addEventListener('click', () => {
-  if (!state.review?.items.length) return;
-  state.review.session = crypto.randomUUID();
-  state.review.position = 0;
-  state.review.correct = 0;
+  if (!state.review?.plan?.items.length) return;
+  state.review.position = state.review.plan.items.findIndex((_, index) => !state.review.plan.results[index]);
+  if (state.review.position < 0) return finishReview();
   renderReviewQuestion();
 });
 $('reviewNext').addEventListener('click', () => {
-  if (!state.review || $('reviewNext').hidden) return;
-  state.review.position++;
-  if (state.review.position < state.review.items.length) renderReviewQuestion();
+  if (!state.review?.plan || $('reviewNext').hidden) return;
+  state.review.position = state.review.plan.items.findIndex((_, index) => index > state.review.position && !state.review.plan.results[index]);
+  if (state.review.position >= 0) renderReviewQuestion();
   else finishReview();
 });
 $('libraryPrev').addEventListener('click', () => { state.libraryPage--; renderLibrary(); });
@@ -793,82 +795,194 @@ async function openReview() {
   $('libraryView').hidden = true;
   $('mobileTabs').hidden = true;
   $('reviewView').hidden = false;
-  $('topTitle').textContent = '復習';
+  $('topTitle').textContent = '今日の復習';
   $('sidebar').classList.remove('open');
-  $('reviewTitle').textContent = '復習';
-  $('reviewIntro').textContent = '復習する問題を確認しています…';
+  $('reviewTitle').textContent = '今日の復習';
+  $('reviewIntro').textContent = '保存済みの問題を確認しています…';
   $('reviewContent').replaceChildren();
+  $('reviewIncludeAi').closest('label').hidden = false;
   $('reviewBack').hidden = true;
+  $('reviewPrepare').hidden = false;
+  $('reviewPrepare').disabled = true;
   $('reviewStart').hidden = true;
   $('reviewNext').hidden = true;
   try {
-    const items = await api('/api/review');
+    const status = await api('/api/review');
     if ($('reviewView').hidden || state.reviewRequest !== request) return;
-    state.review = { items, session: null, position: 0, correct: 0 };
-    $('reviewIntro').textContent = items.length ? `復習する問題：${items.length}問` : '復習する問題はありません。';
-    if (!items.length) return;
-    const list = document.createElement('ol');
-    list.className = 'review-list';
-    for (const item of items) {
-      const row = document.createElement('li');
-      const title = document.createElement('strong');
-      title.textContent = item.title;
-      const question = document.createElement('span');
-      question.textContent = item.question;
-      row.append(title, question);
-      list.append(row);
+    state.review = { existingCount: status.existingCount, plan: null, position: 0 };
+    if (!status.existingCount) {
+      $('reviewIntro').textContent = 'まだ復習できる問題がありません。まずは問題を作成して解いてみましょう。';
+      $('reviewIncludeAi').closest('label').hidden = true;
+      $('reviewPrepare').hidden = true;
+      $('reviewStart').hidden = false;
+      $('reviewStart').disabled = true;
+      return;
     }
-    $('reviewContent').append(list);
-    $('reviewStart').hidden = false;
+    $('reviewIntro').textContent = `保存済みの問題：${status.existingCount}問。解答履歴から今日の内容を選びます。`;
+    await loadDailyPlan();
   } catch (error) {
-    $('reviewIntro').textContent = '復習する問題を読み込めませんでした。';
+    $('reviewIntro').textContent = '今日の復習を読み込めませんでした。';
     showToast(error.message);
   }
 }
 
-async function renderReviewQuestion() {
-  const review = state.review;
-  const item = review.items[review.position];
-  $('reviewTitle').textContent = `復習 ${review.position + 1} / ${review.items.length}`;
-  $('reviewIntro').textContent = item.title;
+function showDailyPlan(plan) {
+  state.review.plan = plan;
+  $('reviewTitle').textContent = '今日の復習';
+  $('reviewPrepare').hidden = true;
+  $('reviewStart').hidden = false;
+  $('reviewStart').disabled = false;
+  $('reviewStart').textContent = Object.keys(plan.results).length ? '今日の復習を再開' : '今日の復習を開始';
+  $('reviewIntro').textContent = `今日の復習：${plan.items.length}問（既存 ${plan.items.filter(item => item.kind === 'existing').length}問・AI類題 ${plan.items.filter(item => item.kind === 'ai_review').length}問）`;
   $('reviewContent').replaceChildren();
-  $('reviewBack').hidden = false;
-  $('reviewStart').hidden = true;
-  $('reviewNext').hidden = true;
-  try {
-    const chat = await api(`/api/chats/${item.chatId}`);
-    if (state.review !== review || $('reviewView').hidden || review.items[review.position] !== item) return;
-    const message = chat.messages.find(entry => entry.id === item.messageId && entry.quiz);
-    if (!message) throw new Error('問題が見つかりません。');
-    $('reviewContent').append(quizElement(message, {
-      chatId: item.chatId, source: 'review', fresh: true, session: review.session, indices: [item.index],
-      onJudged: response => {
-        review.correct += Number(response.ok);
-        $('reviewNext').textContent = review.position + 1 === review.items.length ? '結果を見る' : '次の問題へ';
-        $('reviewNext').hidden = false;
-      }
-    }));
-  } catch (error) {
-    showToast(error.message);
-    $('reviewIntro').textContent = '問題を読み込めませんでした。';
-  }
-}
-
-async function finishReview() {
-  const review = state.review;
-  $('reviewTitle').textContent = '復習結果';
-  $('reviewIntro').textContent = `${review.items.length}問中 ${review.correct}問正解`;
-  $('reviewContent').replaceChildren();
-  $('reviewNext').hidden = true;
-  $('reviewBack').hidden = false;
-  try {
-    const remaining = await api('/api/review');
-    if (state.review !== review || $('reviewView').hidden) return;
+  const explanation = document.createElement('p');
+  explanation.className = 'review-explanation';
+  explanation.textContent = plan.explanation;
+  $('reviewContent').append(explanation);
+  const progress = Object.keys(plan.results).length;
+  if (progress) {
     const detail = document.createElement('p');
     detail.className = 'review-summary';
-    detail.textContent = remaining.length ? `復習する問題はあと${remaining.length}問あります。` : '復習する問題はありません。';
+    detail.textContent = `${progress} / ${plan.items.length}問 回答済み`;
     $('reviewContent').append(detail);
-  } catch (error) { showToast(error.message); }
+  }
+  if (progress === plan.items.length) finishReview();
+}
+
+async function loadDailyPlan() {
+  const review = state.review;
+  if (!review?.existingCount) return;
+  const includeAi = $('reviewIncludeAi').checked;
+  const request = crypto.randomUUID();
+  state.reviewPlanRequest = request;
+  $('reviewStart').hidden = true;
+  $('reviewPrepare').hidden = false;
+  $('reviewPrepare').disabled = true;
+  $('reviewContent').replaceChildren();
+  try {
+    const { plan } = await api(`/api/review/today?ai=${includeAi ? '1' : '0'}`);
+    if (state.review !== review || state.reviewPlanRequest !== request || $('reviewView').hidden) return;
+    if (plan) showDailyPlan(plan);
+    else {
+      review.plan = null;
+      $('reviewIntro').textContent = `保存済みの問題：${review.existingCount}問。準備すると今日の内容を選び、説明を生成します。`;
+      $('reviewPrepare').disabled = false;
+    }
+  } catch (error) { showToast(error.message); $('reviewPrepare').disabled = false; }
+}
+
+async function prepareDailyPlan() {
+  if (!state.review?.existingCount || $('reviewPrepare').disabled) return;
+  const review = state.review;
+  const includeAi = $('reviewIncludeAi').checked;
+  $('reviewPrepare').disabled = true;
+  $('reviewIncludeAi').disabled = true;
+  $('reviewIntro').textContent = '今日の問題と内容説明を準備しています…';
+  try {
+    const { plan } = await api('/api/review/today', { method: 'POST', body: JSON.stringify({ includeAi }) });
+    if (state.review === review && !$('reviewView').hidden) showDailyPlan(plan);
+  } catch (error) {
+    showToast(error.message);
+    $('reviewIntro').textContent = '準備に失敗しました。もう一度お試しください。';
+    $('reviewPrepare').disabled = false;
+  } finally { $('reviewIncludeAi').disabled = false; }
+}
+
+function renderReviewQuestion() {
+  const review = state.review;
+  const plan = review.plan;
+  const position = review.position;
+  const item = plan.items[position];
+  $('reviewTitle').textContent = `今日の復習 ${position + 1} / ${plan.items.length}`;
+  $('reviewIntro').textContent = item.title;
+  $('reviewContent').replaceChildren();
+  $('reviewNext').hidden = true;
+  $('reviewBack').hidden = false;
+  $('reviewPrepare').hidden = true;
+  $('reviewStart').hidden = true;
+  $('reviewIncludeAi').closest('label').hidden = true;
+  const block = document.createElement('div');
+  block.className = 'quiz-item';
+  const label = document.createElement('div');
+  label.className = 'quiz-q';
+  label.textContent = item.kind === 'ai_review' ? 'AI生成の類題' : `問題 ${item.index + 1}`;
+  const body = document.createElement('div');
+  renderMarkdown(body, item.quiz.q);
+  block.append(label, body);
+  if (item.quiz.hint) {
+    const hint = document.createElement('details');
+    hint.className = 'quiz-hint';
+    const summary = document.createElement('summary');
+    summary.textContent = 'ヒント';
+    const text = document.createElement('div');
+    text.textContent = item.quiz.hint;
+    hint.append(summary, text);
+    block.append(hint);
+  }
+  const row = document.createElement('div');
+  row.className = 'quiz-row';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 500;
+  input.autocomplete = 'off';
+  input.placeholder = '答えを入力してEnter';
+  input.setAttribute('aria-label', '復習問題の回答');
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = '判定';
+  const result = document.createElement('div');
+  result.className = 'quiz-result';
+  const judge = async () => {
+    const text = input.value;
+    if (!text.trim() || input.disabled) return;
+    input.disabled = true;
+    button.disabled = true;
+    try {
+      const response = await api('/api/review/today/answer', { method: 'POST', body: JSON.stringify({
+        planId: plan.id, includeAi: plan.includeAi, index: position, text
+      }) });
+      plan.results[position] = { text, ok: response.ok, source: item.kind === 'ai_review' ? 'ai_review' : 'review' };
+      const status = document.createElement('div');
+      status.className = response.ok ? 'quiz-ok' : 'quiz-ng';
+      status.textContent = response.ok ? '○ 正解' : '× 不正解';
+      result.append(status);
+      if (!response.ok) {
+        const answer = document.createElement('div');
+        answer.className = 'quiz-answer';
+        answer.textContent = `答え：${response.answer}`;
+        result.append(answer);
+      }
+      if (response.explanation) {
+        const detail = document.createElement('div');
+        detail.className = 'quiz-explanation';
+        renderMarkdown(detail, response.explanation);
+        result.append(detail);
+      }
+      $('reviewNext').textContent = plan.items.every((_, index) => plan.results[index]) ? '結果を見る' : '次の問題へ';
+      $('reviewNext').hidden = false;
+    } catch (error) { input.disabled = false; showToast(error.message); }
+    finally { button.disabled = false; }
+  };
+  input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.isComposing) judge(); });
+  button.addEventListener('click', judge);
+  row.append(input, button);
+  block.append(row, result);
+  $('reviewContent').append(block);
+}
+
+function finishReview() {
+  const plan = state.review.plan;
+  $('reviewTitle').textContent = '今日の復習結果';
+  $('reviewIntro').textContent = `${plan.items.length}問中 ${Object.values(plan.results).filter(entry => entry.ok).length}問正解`;
+  $('reviewContent').replaceChildren();
+  $('reviewStart').hidden = true;
+  $('reviewNext').hidden = true;
+  $('reviewBack').hidden = false;
+  $('reviewIncludeAi').closest('label').hidden = true;
+  const detail = document.createElement('p');
+  detail.className = 'review-summary';
+  detail.textContent = '今日の復習を終えました。回答履歴は保存されています。';
+  $('reviewContent').append(detail);
 }
 
 function libraryDate(at) {
@@ -972,6 +1086,7 @@ async function openLibraryItem(item) {
         renderLibrary();
       }
     }));
+    for (const input of quizHost.querySelectorAll('.quiz-row input')) input.value = '';
   } catch (error) { showToast(error.message); }
 }
 

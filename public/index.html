@@ -26,7 +26,7 @@
       </button>
       <button class="new-chat" id="reviewButton" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 12a8 8 0 1 1 2.4 5.7M4 17v-5h5"/><path d="m9 12 2 2 4-4"/></svg>
-        復習
+        今日の復習
       </button>
       <div class="sidebar-section history-section">
         <div class="section-label">最近のチャット</div>
@@ -140,10 +140,12 @@
         <div class="review-panel">
           <h1 id="reviewTitle">復習</h1>
           <p class="review-intro" id="reviewIntro"></p>
+          <label class="review-option" for="reviewIncludeAi"><input id="reviewIncludeAi" type="checkbox" checked>AI生成の類題を含める</label>
           <div id="reviewContent"></div>
           <div class="review-actions">
             <button class="text-button" id="reviewBack" type="button" hidden>一覧に戻る</button>
-            <button class="review-primary" id="reviewStart" type="button" hidden>復習を始める</button>
+            <button class="review-primary" id="reviewPrepare" type="button" disabled>今日の復習を準備</button>
+            <button class="review-primary" id="reviewStart" type="button" disabled hidden>今日の復習を開始</button>
             <button class="review-primary" id="reviewNext" type="button" hidden>次の問題へ</button>
           </div>
         </div>
