@@ -297,7 +297,7 @@ export async function createServer() {
         }
         const ok = judgeAnswer(text, item.answers);
         const current = message.quiz.results[index] || { attempts: 0, correct: 0 };
-        const entry = { attempts: current.attempts + 1, correct: current.correct + (ok ? 1 : 0), lastOk: ok };
+        const entry = { attempts: current.attempts + 1, correct: current.correct + (ok ? 1 : 0), lastOk: ok, lastAnswer: text };
         const attempts = Array.isArray(message.quiz.attempts) ? [...message.quiz.attempts] : [];
         if (attempts.length === 0) {
           const migrated = legacyAttempt(message);

@@ -293,6 +293,7 @@ function quizElement(message, options = {}) {
     input.dataset.message = message.id;
     input.dataset.index = String(index);
     input.disabled = !!(results[index] && results[index].attempts > 0);
+    if (input.disabled && typeof results[index].lastAnswer === 'string') input.value = results[index].lastAnswer;
     input.addEventListener('input', () => {
       quizDraftLive.set(quizDraftKey(message.id, index), input.value);
       saveQuizDraft(quizDraftKey(message.id, index), input.value);
@@ -313,7 +314,7 @@ function quizElement(message, options = {}) {
           method: 'POST',
           body: JSON.stringify({ index, text: value, source, session })
         });
-        const entry = { attempts: response.attempts, correct: (results[index]?.correct || 0) + (response.ok ? 1 : 0), lastOk: response.ok };
+        const entry = { attempts: response.attempts, correct: (results[index]?.correct || 0) + (response.ok ? 1 : 0), lastOk: response.ok, lastAnswer: value };
         results[index] = entry;
         paintQuizResult(result, quiz, index);
         clearQuizDraft(quizDraftKey(message.id, index));
