@@ -20,6 +20,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6"/><path d="M15 19h6m-3-3v6M8 9h6M8 13h4"/></svg>
         新しいチャット
       </button>
+      <button class="new-chat" id="libraryButton" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 19V6a1 1 0 0 1 1-1h13v13H5a1 1 0 0 0-1 1Zm0 0a1 1 0 0 0 1 1h13"/><path d="M9 8h6M9 12h6"/></svg>
+        ライブラリ
+      </button>
       <div class="sidebar-section history-section">
         <div class="section-label">最近のチャット</div>
         <nav id="chatList" aria-label="最近のチャット"></nav>
@@ -107,6 +111,28 @@
           </div>
           <div class="preview-frame-wrap"><iframe id="lessonFrame" title="生成した教材" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe></div>
           <div class="preview-foot">教材内の「学習／問題モード」を切り替えて試せます。</div>
+        </aside>
+      </div>
+
+      <div class="library-view" id="libraryView" hidden>
+        <div class="library-main">
+          <header class="library-head">
+            <button class="text-button" id="closeLibrary" type="button">チャットに戻る</button>
+          </header>
+          <div class="library-grid" id="libraryGrid"></div>
+          <div class="library-pager" id="libraryPager" hidden>
+            <button class="text-button" id="libraryPrev" type="button">前へ</button>
+            <span id="libraryPageLabel"></span>
+            <button class="text-button" id="libraryNext" type="button">次へ</button>
+          </div>
+        </div>
+        <aside class="preview-pane library-preview" id="libraryPreview" aria-label="ライブラリのプレビュー">
+          <div class="preview-head">
+            <div><h2>教材プレビュー</h2></div>
+          </div>
+          <div class="preview-frame-wrap" id="libraryFrameWrap" hidden><iframe id="libraryFrame" title="ライブラリの教材" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe></div>
+          <div class="library-quiz-host" id="libraryQuizHost" hidden></div>
+          <div class="preview-foot" id="libraryPreviewFoot">項目を選ぶとここに表示されます。</div>
         </aside>
       </div>
     </div>

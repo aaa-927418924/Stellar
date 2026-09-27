@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { Store } from './store.js';
 import { buildPrompt, extractHtml } from './prompts.js';
-import { judgeAnswer, parseQuiz } from './quiz.js';
+import { aggregateAttempts, judgeAnswer, legacyAttempt, parseQuiz } from './quiz.js';
 import { runOpenCode, listModels, findOpenCode, DEFAULT_MODEL } from './opencode.js';
 import { appendProgress, progressFromEvent } from './progress.js';
 
@@ -133,10 +133,10 @@ async function runJob({ chat, text, action, model, attachments, lesson, controll
       response = response.slice(0, 500);
       organizePrompt = true;
     } else if (action === 'ask' || action === 'question') {
-      const items = parseQuiz(result);
-      if (items) {
-        response = `問題を${items.length}問作成しました。下の入力欄に答えてください。`;
-        chat.messages.push({ id: randomUUID(), role: 'assistant', text: response, quiz: { items, results: {} }, progress: chat.job.progress, at: new Date().toISOString() });
+      const parsed = parseQuiz(result);
+      if (parsed) {
+        response = `問題を${parsed.items.length}問作成しました。下の入力欄に答えてください。`;
+        chat.messages.push({ id: randomUUID(), role: 'assistant', text: response, quiz: { items: parsed.items, results: {}, attempts: [], summary: parsed.summary }, progress: chat.job.progress, at: new Date().toISOString() });
         appendProgress(chat, 'status', '完了しました。');
         chat.job = null;
         await store.save(chat);
@@ -239,6 +239,27 @@ export async function createServer() {
         }
         return json(res, 200, { default: DEFAULT_MODEL, models: modelCache.models });
       }
+      if (req.method === 'GET' && url.pathname === '/api/library') {
+        const items = [];
+        for (const chat of await store.list()) {
+          if (chat.lesson) {
+            items.push({ kind: 'lesson', chatId: chat.id, messageId: null, title: chat.title, at: chat.lessonUpdatedAt || chat.updatedAt, summary: '', stats: null, total: 0 });
+          }
+          for (const message of chat.messages) {
+            if (message.quiz?.items?.length) {
+              const attempts = Array.isArray(message.quiz.attempts) ? message.quiz.attempts : [];
+              const display = attempts.length > 0 ? attempts : (() => { const legacy = legacyAttempt(message); return legacy ? [legacy] : []; })();
+              items.push({
+                kind: 'quiz', chatId: chat.id, messageId: message.id, title: chat.title,
+                at: message.at, summary: message.quiz.summary || '',
+                stats: aggregateAttempts(display), total: message.quiz.items.length
+              });
+            }
+          }
+        }
+        items.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+        return json(res, 200, items);
+      }
       if (req.method === 'PUT' && url.pathname === '/api/settings') {
         const settings = await body(req);
         const model = String(settings.model || '').trim();
@@ -268,6 +289,7 @@ export async function createServer() {
         const payload = await body(req);
         const index = Number(payload.index);
         const text = String(payload.text || '');
+        const source = ['initial', 'library', 'review'].includes(payload.source) ? payload.source : 'initial';
         const item = message.quiz.items[index];
         if (!Number.isInteger(index) || !item || !text.trim() || text.length > 500) {
           return fail(res, 400, '回答は1～500文字で入力してください。');
@@ -275,10 +297,28 @@ export async function createServer() {
         const ok = judgeAnswer(text, item.answers);
         const current = message.quiz.results[index] || { attempts: 0, correct: 0 };
         const entry = { attempts: current.attempts + 1, correct: current.correct + (ok ? 1 : 0), lastOk: ok };
+        const attempts = Array.isArray(message.quiz.attempts) ? [...message.quiz.attempts] : [];
+        if (attempts.length === 0) {
+          const migrated = legacyAttempt(message);
+          if (migrated) attempts.push(migrated);
+        }
+        const finishedItems = message.quiz.items.map((_, i) => {
+          if (i === index) return ok;
+          const prev = message.quiz.results[i];
+          return prev ? !!prev.lastOk : null;
+        });
+        attempts.push({
+          n: attempts.length + 1,
+          at: new Date().toISOString(),
+          source,
+          total: message.quiz.items.length,
+          correct: finishedItems.filter(Boolean).length,
+          items: finishedItems
+        });
         const results = { ...message.quiz.results, [index]: entry };
-        message.quiz = { items: message.quiz.items, results };
+        message.quiz = { items: message.quiz.items, results, attempts, summary: message.quiz.summary || '' };
         await store.save(chat);
-        return json(res, 200, { ok, attempts: entry.attempts, lastOk: entry.lastOk, explanation: ok ? item.explanation : '' });
+        return json(res, 200, { ok, attempts: entry.attempts, lastOk: entry.lastOk, explanation: item.explanation, answer: item.answers[0] });
       }
       const cancelMatch = /^\/api\/chats\/([0-9a-f-]{36})\/cancel$/.exec(url.pathname);
       if (req.method === 'POST' && cancelMatch) {

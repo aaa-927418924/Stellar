@@ -47,7 +47,40 @@ export function parseQuiz(result) {
         explanation: cleanString(entry?.explanation, 2000) || ''
       });
     }
-    if (valid && items.length > 0) return items;
+    if (valid && items.length > 0) {
+      return { items, summary: cleanString(data?.summary, 200) || '' };
+    }
   }
   return null;
+}
+
+export function legacyAttempt(message) {
+  const results = message?.quiz?.results || {};
+  const total = message?.quiz?.items?.length || 0;
+  const keys = Object.keys(results);
+  if (total === 0 || keys.length === 0) return null;
+  const items = message.quiz.items.map((_, index) => !!results[index]?.lastOk);
+  return {
+    n: 1,
+    at: message.at || new Date(0).toISOString(),
+    source: 'initial',
+    total,
+    correct: items.filter(Boolean).length,
+    items,
+    migrated: true
+  };
+}
+
+export function aggregateAttempts(attempts) {
+  const list = (attempts || []).filter(entry => entry && typeof entry.total === 'number');
+  if (list.length === 0) return { count: 0, lastOk: false, lastCorrect: 0, lastTotal: 0, lastAt: null };
+  const last = list[list.length - 1];
+  const items = Array.isArray(last.items) ? last.items : [];
+  return {
+    count: list.length,
+    lastOk: items.length > 0 && items.every(Boolean),
+    lastCorrect: last.correct,
+    lastTotal: last.total,
+    lastAt: last.at
+  };
 }

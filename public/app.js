@@ -13,7 +13,7 @@ function saveOrganizedSeen() {
   } catch { /* ignore */ }
 }
 
-const state = { chats: [], current: null, chatMenuTarget: null, organizedSeen: loadOrganizedSeen(), organizeArmed: [], submitting: false, polling: false, attachments: [], mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
+const state = { chats: [], current: null, chatMenuTarget: null, library: [], libraryPage: 0, librarySelected: null, organizedSeen: loadOrganizedSeen(), organizeArmed: [], submitting: false, polling: false, attachments: [], mobileTab: 'chat', previewOpen: true, model: '', previewUrl: '', progressOpen: true };
 
 function clampPane(value, min, max) { return Math.min(max, Math.max(min, value)); }
 
@@ -176,16 +176,22 @@ function closeLightbox() {
   document.body.classList.remove('lightbox-open');
 }
 
-function paintQuizResult(box, message, index) {
+function paintQuizResult(box, quiz, index) {
   box.replaceChildren();
-  const state = message.quiz.results[index];
+  const state = quiz.results[index];
   if (!state || !state.attempts) return;
+  const item = quiz.items[index];
   const status = document.createElement('div');
   status.className = state.lastOk ? 'quiz-ok' : 'quiz-ng';
-  status.textContent = state.lastOk ? `○ 正解（${state.attempts}回目）` : `× 不正解（${state.attempts}回挑戦中）`;
+  status.textContent = state.lastOk ? '○ 正解' : '× 不正解';
   box.append(status);
-  const item = message.quiz.items[index];
-  if (state.lastOk && item.explanation) {
+  if (!state.lastOk && item.answers[0]) {
+    const answer = document.createElement('div');
+    answer.className = 'quiz-answer';
+    answer.textContent = `答え：${item.answers[0]}`;
+    box.append(answer);
+  }
+  if (item.explanation) {
     const explanation = document.createElement('div');
     explanation.className = 'quiz-explanation';
     renderMarkdown(explanation, item.explanation);
@@ -193,7 +199,11 @@ function paintQuizResult(box, message, index) {
   }
 }
 
-function quizElement(message) {
+function quizElement(message, options = {}) {
+  const chatId = options.chatId || state.current?.id;
+  const source = options.source || 'initial';
+  const results = options.fresh ? {} : message.quiz.results;
+  const quiz = { items: message.quiz.items, results };
   const wrap = document.createElement('div');
   wrap.className = 'quiz';
   message.quiz.items.forEach((item, index) => {
@@ -227,21 +237,21 @@ function quizElement(message) {
     button.textContent = '判定';
     const result = document.createElement('div');
     result.className = 'quiz-result';
-    paintQuizResult(result, message, index);
+    paintQuizResult(result, quiz, index);
     const judge = async () => {
       const value = input.value;
-      if (!value.trim() || input.disabled) return;
+      if (!value.trim() || input.disabled || !chatId) return;
       input.disabled = true;
       button.disabled = true;
       try {
-        const response = await api(`/api/chats/${state.current.id}/messages/${message.id}/answer`, {
+        const response = await api(`/api/chats/${chatId}/messages/${message.id}/answer`, {
           method: 'POST',
-          body: JSON.stringify({ index, text: value })
+          body: JSON.stringify({ index, text: value, source })
         });
-        const entry = { attempts: response.attempts, correct: (message.quiz.results[index]?.correct || 0) + (response.ok ? 1 : 0), lastOk: response.ok };
-        message.quiz.results[index] = entry;
-        paintQuizResult(result, message, index);
-        input.disabled = response.ok;
+        const entry = { attempts: response.attempts, correct: (results[index]?.correct || 0) + (response.ok ? 1 : 0), lastOk: response.ok };
+        results[index] = entry;
+        paintQuizResult(result, quiz, index);
+        input.disabled = true;
       } catch (error) {
         showToast(error.message);
         input.disabled = false;
@@ -442,6 +452,8 @@ function render() {
 
 async function openChat(id) {
   state.current = await api(`/api/chats/${id}`);
+  $('libraryView').hidden = true;
+  $('contentGrid').hidden = false;
   state.mobileTab = 'chat';
   state.previewOpen = true;
   state.progressOpen = true;
@@ -451,6 +463,8 @@ async function openChat(id) {
 
 function newChat() {
   state.current = null;
+  $('libraryView').hidden = true;
+  $('contentGrid').hidden = false;
   document.title = 'Study App';
   state.mobileTab = 'chat';
   state.previewOpen = true;
@@ -566,6 +580,10 @@ $('messageInput').addEventListener('keydown', event => {
   }
 });
 $('newChat').addEventListener('click', newChat);
+$('libraryButton').addEventListener('click', openLibrary);
+$('closeLibrary').addEventListener('click', closeLibraryView);
+$('libraryPrev').addEventListener('click', () => { state.libraryPage--; renderLibrary(); });
+$('libraryNext').addEventListener('click', () => { state.libraryPage++; renderLibrary(); });
 $('fileInput').addEventListener('change', event => {
   const files = [...(event.target.files || [])];
   (async () => {
@@ -667,6 +685,110 @@ if (hostView) {
       ? '<rect x="6" y="7" width="11" height="11" rx="1"/><path d="M9 7V6a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-1"/>'
       : '<rect x="4" y="4" width="15" height="15" rx="2"/>';
   });
+}
+
+const LIBRARY_PAGE_SIZE = 16;
+
+function libraryDate(at) {
+  if (!at) return '';
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function libraryStatsText(item) {
+  if (item.kind !== 'quiz') return libraryDate(item.at);
+  const stats = item.stats || { count: 0 };
+  if (!stats.count) return `未挑戦 · ${item.total}問 · ${libraryDate(item.at)}`;
+  const mark = stats.lastOk ? '○' : '×';
+  return `${stats.count}回挑戦 · 最終 ${stats.lastCorrect}/${stats.lastTotal} ${mark} · ${libraryDate(stats.lastAt)}`;
+}
+
+function libraryKey(item) { return `${item.kind}:${item.chatId}:${item.messageId || ''}`; }
+
+async function openLibrary() {
+  closeChatMenu();
+  state.libraryPage = 0;
+  state.librarySelected = null;
+  $('contentGrid').hidden = true;
+  $('mobileTabs').hidden = true;
+  $('libraryView').hidden = false;
+  $('topTitle').textContent = 'ライブラリ';
+  $('sidebar').classList.remove('open');
+  try {
+    state.library = await api('/api/library');
+  } catch (error) {
+    showToast(error.message);
+    state.library = [];
+  }
+  renderLibrary();
+}
+
+function closeLibraryView() {
+  $('libraryView').hidden = true;
+  $('contentGrid').hidden = false;
+  state.librarySelected = null;
+  render();
+}
+
+function renderLibrary() {
+  const grid = $('libraryGrid');
+  grid.replaceChildren();
+  const pages = Math.max(1, Math.ceil(state.library.length / LIBRARY_PAGE_SIZE));
+  state.libraryPage = Math.min(Math.max(0, state.libraryPage), pages - 1);
+  for (const item of state.library.slice(state.libraryPage * LIBRARY_PAGE_SIZE, (state.libraryPage + 1) * LIBRARY_PAGE_SIZE)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'library-card' + (state.librarySelected === libraryKey(item) ? ' active' : '');
+    const kind = document.createElement('div');
+    kind.className = 'library-kind' + (item.kind === 'lesson' ? ' html' : '');
+    kind.textContent = item.kind === 'lesson' ? 'HTML教材' : `問題セット ${item.total}問`;
+    const title = document.createElement('div');
+    title.className = 'library-title';
+    title.textContent = item.title;
+    const summary = document.createElement('div');
+    summary.className = 'library-summary';
+    summary.textContent = item.summary || (item.kind === 'quiz' ? '要約なし' : '単一HTML教材');
+    const meta = document.createElement('div');
+    meta.className = 'library-meta';
+    meta.textContent = libraryStatsText(item);
+    button.append(kind, title, summary, meta);
+    button.addEventListener('click', () => openLibraryItem(item));
+    grid.append(button);
+  }
+  $('libraryPager').hidden = pages <= 1;
+  $('libraryPageLabel').textContent = `${state.libraryPage + 1} / ${pages} ページ`;
+  $('libraryPrev').disabled = state.libraryPage === 0;
+  $('libraryNext').disabled = state.libraryPage >= pages - 1;
+}
+
+async function openLibraryItem(item) {
+  state.librarySelected = libraryKey(item);
+  renderLibrary();
+  const frameWrap = $('libraryFrameWrap');
+  const quizHost = $('libraryQuizHost');
+  $('libraryPreviewFoot').textContent = item.title;
+  if (item.kind === 'lesson') {
+    quizHost.replaceChildren();
+    quizHost.hidden = true;
+    frameWrap.hidden = false;
+    $('libraryFrame').src = `/api/chats/${item.chatId}/lesson?v=${encodeURIComponent(item.at || 'initial')}`;
+    return;
+  }
+  frameWrap.hidden = true;
+  $('libraryFrame').removeAttribute('src');
+  quizHost.replaceChildren();
+  quizHost.hidden = false;
+  try {
+    const chat = await api(`/api/chats/${item.chatId}`);
+    const message = chat.messages.find(entry => entry.id === item.messageId && entry.quiz);
+    if (!message) return showToast('問題が見つかりません。');
+    const note = document.createElement('div');
+    note.className = 'library-meta';
+    note.textContent = `${message.quiz.items.length}問 · 最初から解けます（記録は保存されます）`;
+    quizHost.append(note);
+    quizHost.append(quizElement(message, { chatId: item.chatId, source: 'library', fresh: true }));
+  } catch (error) { showToast(error.message); }
 }
 
 async function poll() {
