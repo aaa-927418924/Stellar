@@ -289,12 +289,14 @@ function quizElement(message, options = {}) {
     input.type = 'text';
     input.maxLength = 500;
     input.placeholder = '答えを入力してEnter';
+    input.autocomplete = 'off';
+    input.name = `quiz-${message.id}-${index}`;
     input.setAttribute('aria-label', `問題${index + 1}の回答`);
     input.dataset.message = message.id;
     input.dataset.index = String(index);
     input.disabled = !!(results[index] && results[index].attempts > 0);
     if (input.disabled && typeof results[index].lastAnswer === 'string') input.value = results[index].lastAnswer;
-    input.addEventListener('input', () => {
+    if (source === 'initial') input.addEventListener('input', () => {
       quizDraftLive.set(quizDraftKey(message.id, index), input.value);
       saveQuizDraft(quizDraftKey(message.id, index), input.value);
     });
@@ -317,8 +319,10 @@ function quizElement(message, options = {}) {
         const entry = { attempts: response.attempts, correct: (results[index]?.correct || 0) + (response.ok ? 1 : 0), lastOk: response.ok, lastAnswer: value };
         results[index] = entry;
         paintQuizResult(result, quiz, index);
-        clearQuizDraft(quizDraftKey(message.id, index));
-        quizDraftLive.delete(quizDraftKey(message.id, index));
+        if (source === 'initial') {
+          clearQuizDraft(quizDraftKey(message.id, index));
+          quizDraftLive.delete(quizDraftKey(message.id, index));
+        }
         input.disabled = true;
         if (options.onJudged) {
           try { await options.onJudged(); }
@@ -329,7 +333,7 @@ function quizElement(message, options = {}) {
         input.disabled = false;
       } finally {
         button.disabled = false;
-        input.focus();
+        if (!input.disabled) input.focus();
       }
     };
     input.addEventListener('keydown', event => {
@@ -862,7 +866,6 @@ async function openLibraryItem(item) {
         renderLibrary();
       }
     }));
-    applyQuizDrafts(null);
   } catch (error) { showToast(error.message); }
 }
 
