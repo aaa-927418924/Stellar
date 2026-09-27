@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $log = Join-Path $StagingDir 'update.log'
 try {
     Wait-Process -Id $ParentPid -Timeout 120 -ErrorAction SilentlyContinue
-    $files = @('Stellar.exe', 'Stellar.Server.exe')
+    $files = @('Stellar.exe')
     foreach ($name in $files) {
         Copy-Item -LiteralPath (Join-Path $InstallDir $name) -Destination (Join-Path $StagingDir "$name.bak") -Force
     }

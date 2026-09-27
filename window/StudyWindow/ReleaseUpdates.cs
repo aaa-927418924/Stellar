@@ -76,7 +76,7 @@ internal static class ReleaseUpdates
             }
             using (var archive = ZipFile.OpenRead(zipPath))
             {
-                var expected = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Stellar.exe", "Stellar.Server.exe" };
+                var expected = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Stellar.exe" };
                 foreach (var entry in archive.Entries)
                 {
                     if (!expected.Remove(entry.FullName) || entry.Length > 150_000_000)

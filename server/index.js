@@ -15,9 +15,8 @@ import { explanationPrompt, formatReviewExplanation, generatedCount, localDay, m
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
 const packaged = /[\\/]caxa[\\/]/.test(process.argv[1] || '') || /[\\/]caxa[\\/]/.test(process.execPath);
-// 旧アプリ名の保存先を維持し、改名後もチャット・教材・復習履歴を共有する。
 const dataRoot = packaged && process.env.APPDATA
-  ? path.join(process.env.APPDATA, 'StudyApp', 'data')
+  ? path.join(process.env.APPDATA, 'Stellar', 'data')
   : path.join(root, 'data');
 const store = new Store(dataRoot);
 const instancePath = path.join(store.root, 'instance.json');

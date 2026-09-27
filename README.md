@@ -36,10 +36,10 @@ The app and its server run on your PC. Chat, lesson, and review data are stored 
 
 | How you run Stellar | Data folder |
 | --- | --- |
-| Windows desktop executable | `%APPDATA%\StudyApp\data` |
+| Windows desktop executable | `%APPDATA%\Stellar\data` |
 | From source | `data/` inside the repository |
 
-The desktop folder keeps the previous app's name so existing study history remains available after upgrading. These folders are separate; running from source does not use the desktop app's history. The repository ignores `data/` and built files in `dist/`.
+The desktop edition also keeps its WebView profile under `%LOCALAPPDATA%\Stellar\webview` and unpacks its bundled server under `%LOCALAPPDATA%\Stellar\runtime`. Data from older builds in `%APPDATA%\StudyApp` is left in place but is not loaded automatically. Source runs and desktop runs use separate histories. The repository ignores `data/` and built files in `dist/`.
 
 Stellar requires an internet connection for AI features. Prompts and attachments are sent to the provider of the model you select through OpenCode. Check important generated explanations and sources against other references.
 
@@ -70,7 +70,7 @@ npm run build:exe
 npm run build:window
 ```
 
-Run `dist\Stellar\Stellar.exe` with `Stellar.Server.exe` in the same folder. The desktop window starts and stops the bundled server automatically. OpenCode CLI and your chosen model's authentication are still required at runtime.
+Run `dist\Stellar\Stellar.exe` by itself. It contains the server, extracts it into your local application data folder, and starts and stops it with the window. You can copy this single executable to another Windows PC with WebView2 Runtime installed. OpenCode CLI and your chosen model's authentication are still required for AI features.
 
 ### Using Stellar
 
@@ -83,9 +83,9 @@ Right-click a chat in the sidebar to pin or unpin it. Generation continues when 
 
 ## Desktop Updates
 
-On launch, the desktop app checks the latest published GitHub release. If it finds a newer version with a `Stellar-win-x64.zip` asset, an update button appears at the bottom of the sidebar. Clicking it downloads the ZIP, checks the app version, replaces the two executables after Stellar closes, and restarts the app. The install folder must be writable. No release or automatic download is required to run the current version; source runs do not show an update notice.
+On launch, the desktop app checks the latest published GitHub release. If it finds a newer version with a `Stellar-win-x64.zip` asset, an update button appears at the bottom of the sidebar. Clicking it downloads the ZIP, checks the app version, replaces the executable after Stellar closes, and restarts the app. The install folder must be writable. No release or automatic download is required to run the current version; source runs do not show an update notice.
 
-For a future release, build both executables and run `scripts/build-release.ps1`. Attach the resulting `dist\Stellar-win-x64.zip` to a GitHub release tagged with the same version as `package.json`, for example `v0.37.0`. The ZIP must contain `Stellar.exe` and `Stellar.Server.exe` at its root.
+For a future release, run both build commands and then `scripts/build-release.ps1`. Attach the resulting `dist\Stellar-win-x64.zip` to a GitHub release tagged with the same version as `package.json`, for example `v0.38.0`. The ZIP contains only `Stellar.exe` at its root.
 
 ## Development
 

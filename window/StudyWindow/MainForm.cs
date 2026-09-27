@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
@@ -114,19 +115,31 @@ public sealed class MainForm : Form
         base.WndProc(ref message);
     }
 
-    private static string BackendPath()
+    private static async Task<string> BackendPathAsync()
     {
-        var dir = AppContext.BaseDirectory;
+        var version = typeof(MainForm).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Stellar", "runtime", version);
+        Directory.CreateDirectory(dir);
         var backend = Path.Combine(dir, "Stellar.Server.exe");
         if (File.Exists(backend)) return backend;
-        throw new FileNotFoundException("バックエンドが見つかりません: " + backend);
+        using var source = Assembly.GetExecutingAssembly().GetManifestResourceStream("StudyWindow.Stellar.Server.exe")
+            ?? throw new FileNotFoundException("同梱バックエンドが見つかりません。");
+        var temporary = Path.Combine(dir, Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            await using (var target = File.Create(temporary)) await source.CopyToAsync(target);
+            try { File.Move(temporary, backend); }
+            catch (IOException) when (File.Exists(backend)) { /* 別のウィンドウが先に展開した */ }
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        return backend;
     }
 
     private static string InstancePath()
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        // バックエンドの既存データ保存先と揃える。
-        return Path.Combine(appData, "StudyApp", "data", "instance.json");
+        return Path.Combine(appData, "Stellar", "data", "instance.json");
     }
 
     private async Task InitializeAsync()
@@ -134,7 +147,7 @@ public sealed class MainForm : Form
         string backendPath;
         try
         {
-            backendPath = BackendPath();
+            backendPath = await BackendPathAsync();
         }
         catch (Exception error)
         {
@@ -144,10 +157,9 @@ public sealed class MainForm : Form
 
         try
         {
-            // WebView2の下書き等も旧アプリから引き継ぐ。
             var dataDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "StudyApp", "webview");
+                "Stellar", "webview");
             Directory.CreateDirectory(dataDir);
             var env = await CoreWebView2Environment.CreateAsync(null, dataDir);
             await view.EnsureCoreWebView2Async(env);

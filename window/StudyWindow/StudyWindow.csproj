@@ -9,7 +9,7 @@
     <AssemblyName>Stellar</AssemblyName>
     <Product>Stellar</Product>
     <Title>Stellar</Title>
-    <Version>0.37.0</Version>
+    <Version>0.38.0</Version>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -22,6 +22,7 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
     <PackageReference Include="System.Management" Version="10.0.12" />
     <EmbeddedResource Include="apply-update.ps1" />
+    <EmbeddedResource Include="../../dist/Stellar/Stellar.Server.exe" LogicalName="StudyWindow.Stellar.Server.exe" />
   </ItemGroup>
 
 </Project>
