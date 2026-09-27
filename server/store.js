@@ -53,7 +53,7 @@ export class Store {
 
   async create() {
     const now = new Date().toISOString();
-    const chat = { id: randomUUID(), title: '新しいチャット', createdAt: now, updatedAt: now, lesson: false, mode: null, messages: [] };
+    const chat = { id: randomUUID(), title: '新しいチャット', createdAt: now, updatedAt: now, lesson: false, pinned: false, mode: null, messages: [] };
     await this.save(chat);
     return chat;
   }

@@ -95,30 +95,37 @@ async function loadChats() {
 
 function renderChatList() {
   const list = $('chatList');
+  const pinnedList = $('pinnedChatList');
   list.replaceChildren();
+  pinnedList.replaceChildren();
+  $('pinnedChats').hidden = !state.chats.some(chat => chat.pinned);
   for (const chat of state.chats) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `chat-link${state.current?.id === chat.id ? ' active' : ''}`;
     button.textContent = chat.jobStatus === 'running' ? `${chat.title} · 生成中` : chat.title;
     button.title = chat.title;
+    button.dataset.chatId = chat.id;
     button.addEventListener('click', () => openChat(chat.id));
     button.addEventListener('contextmenu', event => {
       event.preventDefault();
-      openChatMenu(event.clientX, event.clientY, chat.id, chat.title);
+      const rect = button.getBoundingClientRect();
+      openChatMenu(event.clientX || rect.left, event.clientY || rect.bottom, chat);
     });
-    list.append(button);
+    (chat.pinned ? pinnedList : list).append(button);
   }
 }
 
-function openChatMenu(x, y, id, title) {
+function openChatMenu(x, y, chat) {
   const menu = $('chatMenu');
-  state.chatMenuTarget = { id, title };
+  state.chatMenuTarget = { id: chat.id, title: chat.title, pinned: !!chat.pinned };
   menu.hidden = false;
-  const width = 160, height = 44;
-  menu.style.left = `${Math.min(x, window.innerWidth - width - 8)}px`;
-  menu.style.top = `${Math.min(y, window.innerHeight - height - 8)}px`;
-  $('deleteChatButton').textContent = `「${title.slice(0, 12)}${title.length > 12 ? '…' : ''}」を削除`;
+  const width = 190, height = 88;
+  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - height - 8))}px`;
+  $('pinChatButton').textContent = chat.pinned ? 'ピン留めを解除' : 'サイドバーにピン留め';
+  $('deleteChatButton').textContent = `「${chat.title.slice(0, 12)}${chat.title.length > 12 ? '…' : ''}」を削除`;
+  $('pinChatButton').focus();
 }
 
 function closeChatMenu() {
@@ -707,6 +714,16 @@ $('deleteChatButton').addEventListener('click', async () => {
     else await loadChats();
     render();
     showToast('チャットを削除しました。');
+  } catch (error) { showToast(error.message); }
+});
+$('pinChatButton').addEventListener('click', async () => {
+  const target = state.chatMenuTarget;
+  closeChatMenu();
+  if (!target) return;
+  try {
+    await api(`/api/chats/${target.id}/pin`, { method: 'PATCH', body: JSON.stringify({ pinned: !target.pinned }) });
+    await loadChats();
+    document.querySelector(`[data-chat-id="${target.id}"]`)?.focus();
   } catch (error) { showToast(error.message); }
 });
 document.addEventListener('click', event => {

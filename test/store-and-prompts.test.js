@@ -20,11 +20,13 @@ test('会話と教材を再読込でき、別のチャットは混ざらない',
     const first = await store.create();
     const second = await store.create();
     first.title = '一次関数';
+    first.pinned = true;
     first.messages.push({ role: 'user', text: '傾き' });
     first.lesson = true;
     await store.save(first);
     await store.saveLesson(first.id, '<!doctype html><html>教材</html>');
     assert.equal((await store.get(first.id)).messages[0].text, '傾き');
+    assert.equal((await store.get(first.id)).pinned, true);
     assert.equal(await store.lesson(first.id), '<!doctype html><html>教材</html>');
     assert.equal(await store.lesson(second.id), null);
     assert.equal((await store.list()).length, 2);

@@ -25,6 +25,7 @@ let appVersion = '';
 try { appVersion = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version || ''; } catch { /* ignore */ }
 const launchSecret = randomBytes(32).toString('hex');
 const active = new Map();
+const liveJobs = new Map();
 const preparingReviews = new Map();
 
 function completedReview(plan) {
@@ -84,7 +85,7 @@ async function staticFile(res, name, type) {
 }
 
 function summary(chat) {
-  return { id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt, lesson: chat.lesson, mode: chat.mode || null, messageCount: chat.messages.length, jobStatus: chat.job?.status || null, lastMessageFailed: !!chat.messages.at(-1)?.failed };
+  return { id: chat.id, title: chat.title, pinned: !!chat.pinned, createdAt: chat.createdAt, updatedAt: chat.updatedAt, lesson: chat.lesson, mode: chat.mode || null, messageCount: chat.messages.length, jobStatus: chat.job?.status || null, lastMessageFailed: !!chat.messages.at(-1)?.failed };
 }
 
 export function attachmentFromPayload(payload) {
@@ -290,6 +291,7 @@ async function runJob({ chat, text, action, model, attachments, lesson, controll
     await store.save(chat);
   } finally {
     active.delete(chat.id);
+    liveJobs.delete(chat.id);
     if (promptFile) await unlink(promptFile).catch(() => {});
   }
 }
@@ -333,6 +335,7 @@ async function send(req, res, id) {
   await store.save(chat);
   const controller = new AbortController();
   active.set(id, controller);
+  liveJobs.set(id, chat);
   void runJob({ chat, text, action, model, attachments, lesson, controller }).catch(error => console.error('生成ジョブが停止しました:', error));
   return json(res, 202, chat);
 }
@@ -432,6 +435,16 @@ export async function createServer() {
         return json(res, 200, { model });
       }
       const chatMatch = /^\/api\/chats\/([0-9a-f-]{36})$/.exec(url.pathname);
+      const pinMatch = /^\/api\/chats\/([0-9a-f-]{36})\/pin$/.exec(url.pathname);
+      if (req.method === 'PATCH' && pinMatch) {
+        const payload = await body(req);
+        if (typeof payload.pinned !== 'boolean') return fail(res, 400, 'ピン留め状態が不正です。');
+        const chat = liveJobs.get(pinMatch[1]) || await store.get(pinMatch[1]);
+        if (!chat) return fail(res, 404, 'チャットが見つかりません。');
+        chat.pinned = payload.pinned;
+        await store.save(chat);
+        return json(res, 200, summary(chat));
+      }
       if (req.method === 'GET' && chatMatch) {
         const chat = await store.get(chatMatch[1]);
         return chat ? json(res, 200, chat) : fail(res, 404, 'チャットが見つかりません。');

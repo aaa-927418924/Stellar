@@ -29,6 +29,10 @@
         今日の復習
       </button>
       <div class="sidebar-section history-section">
+        <div class="pinned-chats" id="pinnedChats" hidden>
+          <div class="section-label">ピン留め</div>
+          <nav id="pinnedChatList" aria-label="ピン留めしたチャット"></nav>
+        </div>
         <div class="section-label">最近のチャット</div>
         <nav id="chatList" aria-label="最近のチャット"></nav>
       </div>
@@ -170,6 +174,7 @@
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="chat-menu" id="chatMenu" role="menu" hidden>
+    <button id="pinChatButton" type="button" role="menuitem">サイドバーにピン留め</button>
     <button id="deleteChatButton" type="button" role="menuitem">削除</button>
   </div>
 
