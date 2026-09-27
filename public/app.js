@@ -251,13 +251,30 @@ function messageElement(message) {
   return element;
 }
 
+const composerHome = { parent: null, next: null };
+
+function placeComposer(empty) {
+  const composer = document.querySelector('.composer-wrap');
+  if (!composer) return;
+  if (empty) {
+    if (!composerHome.parent) {
+      composerHome.parent = composer.parentNode;
+      composerHome.next = composer.nextSibling;
+    }
+    $('emptyComposerSlot').append(composer);
+  } else if (composerHome.parent) {
+    composerHome.parent.insertBefore(composer, composerHome.next);
+  }
+}
 function renderMessages() {
   const messages = $('messages');
   const pane = $('conversation');
   const shouldScroll = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 130;
   messages.replaceChildren();
   const items = state.current?.messages || [];
-  $('welcome').hidden = items.length > 0;
+  const empty = items.length === 0 && !state.current?.job;
+  $('main').classList.toggle('is-empty', empty);
+  placeComposer(empty);
   for (const item of items) messages.append(messageElement(item));
   const job = state.current?.job;
   if (job) {
@@ -495,7 +512,6 @@ document.addEventListener('click', event => {
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') { closeLightbox(); closeChatMenu(); $('sidebar').classList.remove('open'); }
 });
-for (const button of document.querySelectorAll('[data-example]')) button.addEventListener('click', () => { $('messageInput').value = button.dataset.example; $('messageInput').focus(); });
 for (const button of document.querySelectorAll('.mobile-tab')) button.addEventListener('click', () => { state.mobileTab = button.dataset.tab; renderPreview(); });
 async function refreshModelOptions() {
   const select = $('modelInput');

@@ -58,17 +58,13 @@
       <div class="content-grid" id="contentGrid">
         <main class="chat-pane" id="main">
           <div class="conversation" id="conversation">
-            <div class="welcome" id="welcome">
-              <div class="welcome-icon" aria-hidden="true"><svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M18 29c-4-3-9-4-14-3V8c5-1 10 0 14 3 4-3 9-4 14-3v18c-5-1-10 0-14 3Zm0-18v18"/><path d="M8 13c2-.1 4 .4 6 1.4M22 14.4c2-1 4-1.5 6-1.4"/></svg></div>
-              <h1>今日は何を学ぼう？</h1>
-              <p>分からない問題や単元を送ると、触って学べる教材を作ります。</p>
-              <div class="examples" aria-label="入力例">
-                <button type="button" data-example="中学2年生向けに、一次関数の傾きと切片を教えて">一次関数の傾きと切片</button>
-                <button type="button" data-example="光合成の仕組みを図で理解できる教材にして">光合成の仕組み</button>
-                <button type="button" data-example="英語の現在完了を例文で練習したい">英語の現在完了</button>
-              </div>
-            </div>
             <div class="messages" id="messages" aria-live="polite" aria-relevant="additions text"></div>
+          </div>
+
+          <div class="empty-hero" id="emptyHero">
+            <h1>今日は何を学ぼう？</h1>
+            <p>分からない問題や単元を送ると、触って学べる教材を作ります。</p>
+            <div class="empty-composer-slot" id="emptyComposerSlot"></div>
           </div>
 
           <div class="composer-wrap">
