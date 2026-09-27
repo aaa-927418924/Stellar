@@ -664,7 +664,9 @@ $('messageInput').addEventListener('keydown', event => {
 $('newChat').addEventListener('click', newChat);
 $('libraryButton').addEventListener('click', openLibrary);
 $('reviewButton').addEventListener('click', openReview);
-$('reviewBack').addEventListener('click', openReview);
+$('reviewTodayMode').addEventListener('click', () => openReview('today'));
+$('reviewMoreMode').addEventListener('click', () => openReview('more'));
+$('reviewBack').addEventListener('click', () => openReview(state.review?.mode || 'today'));
 $('reviewIncludeAi').addEventListener('change', loadDailyPlan);
 $('reviewPrepare').addEventListener('click', prepareDailyPlan);
 $('reviewStart').addEventListener('click', () => {
@@ -785,22 +787,25 @@ if (hostView) {
 }
 
 const LIBRARY_PAGE_SIZE = 16;
+const MORE_REVIEW_KEY = 'study-more-review-session';
 
-async function openReview() {
+async function openReview(requestedMode = 'today') {
   closeChatMenu();
   const request = crypto.randomUUID();
+  const mode = requestedMode === 'more' ? 'more' : 'today';
   state.reviewRequest = request;
   state.review = null;
   $('contentGrid').hidden = true;
   $('libraryView').hidden = true;
   $('mobileTabs').hidden = true;
   $('reviewView').hidden = false;
-  $('topTitle').textContent = '今日の復習';
+  $('topTitle').textContent = mode === 'more' ? 'もっと復習' : '今日の復習';
   $('sidebar').classList.remove('open');
-  $('reviewTitle').textContent = '今日の復習';
+  $('reviewTitle').textContent = mode === 'more' ? 'もっと復習' : '今日の復習';
   $('reviewIntro').textContent = '保存済みの問題を確認しています…';
   $('reviewContent').replaceChildren();
   $('reviewIncludeAi').closest('label').hidden = false;
+  $('reviewIncludeAi').disabled = false;
   $('reviewBack').hidden = true;
   $('reviewPrepare').hidden = false;
   $('reviewPrepare').disabled = true;
@@ -809,7 +814,12 @@ async function openReview() {
   try {
     const status = await api('/api/review');
     if ($('reviewView').hidden || state.reviewRequest !== request) return;
-    state.review = { existingCount: status.existingCount, plan: null, position: 0 };
+    $('reviewMoreMode').disabled = !status.existingCount || !status.dailyCompleted;
+    const selectedMode = mode === 'more' && !status.dailyCompleted ? 'today' : mode;
+    for (const [id, value] of [['reviewTodayMode', 'today'], ['reviewMoreMode', 'more']]) $('' + id).setAttribute('aria-pressed', String(selectedMode === value));
+    state.review = { mode: selectedMode, existingCount: status.existingCount, dailyCompleted: status.dailyCompleted, plan: null, position: 0 };
+    $('topTitle').textContent = selectedMode === 'more' ? 'もっと復習' : '今日の復習';
+    $('reviewTitle').textContent = $('topTitle').textContent;
     if (!status.existingCount) {
       $('reviewIntro').textContent = 'まだ復習できる問題がありません。まずは問題を作成して解いてみましょう。';
       $('reviewIncludeAi').closest('label').hidden = true;
@@ -818,7 +828,7 @@ async function openReview() {
       $('reviewStart').disabled = true;
       return;
     }
-    $('reviewIntro').textContent = `保存済みの問題：${status.existingCount}問。解答履歴から今日の内容を選びます。`;
+    $('reviewIntro').textContent = `保存済みの問題：${status.existingCount}問。解答履歴から復習内容を選びます。`;
     await loadDailyPlan();
   } catch (error) {
     $('reviewIntro').textContent = '今日の復習を読み込めませんでした。';
@@ -828,12 +838,15 @@ async function openReview() {
 
 function showDailyPlan(plan) {
   state.review.plan = plan;
-  $('reviewTitle').textContent = '今日の復習';
+  const more = state.review.mode === 'more';
+  $('reviewTitle').textContent = more ? 'もっと復習' : '今日の復習';
   $('reviewPrepare').hidden = true;
   $('reviewStart').hidden = false;
   $('reviewStart').disabled = false;
-  $('reviewStart').textContent = Object.keys(plan.results).length ? '今日の復習を再開' : '今日の復習を開始';
-  $('reviewIntro').textContent = `今日の復習：${plan.items.length}問（既存 ${plan.items.filter(item => item.kind === 'existing').length}問・AI類題 ${plan.items.filter(item => item.kind === 'ai_review').length}問）`;
+  $('reviewStart').textContent = `${more ? 'もっと復習' : '今日の復習'}を${Object.keys(plan.results).length ? '再開' : '開始'}`;
+  $('reviewIntro').textContent = `${more ? 'もっと復習' : '今日の復習'}：${plan.items.length}問（既存 ${plan.items.filter(item => item.kind === 'existing').length}問・AI類題 ${plan.items.filter(item => item.kind === 'ai_review').length}問）`;
+  $('reviewIncludeAi').checked = plan.includeAi;
+  $('reviewIncludeAi').disabled = true;
   $('reviewContent').replaceChildren();
   const explanation = document.createElement('p');
   explanation.className = 'review-explanation';
@@ -853,6 +866,7 @@ async function loadDailyPlan() {
   const review = state.review;
   if (!review?.existingCount) return;
   const includeAi = $('reviewIncludeAi').checked;
+  const more = review.mode === 'more';
   const request = crypto.randomUUID();
   state.reviewPlanRequest = request;
   $('reviewStart').hidden = true;
@@ -860,12 +874,24 @@ async function loadDailyPlan() {
   $('reviewPrepare').disabled = true;
   $('reviewContent').replaceChildren();
   try {
-    const { plan } = await api(`/api/review/today?ai=${includeAi ? '1' : '0'}`);
+    let plan;
+    if (more) {
+      const id = localStorage.getItem(MORE_REVIEW_KEY);
+      if (id && /^[0-9a-f-]{36}$/i.test(id)) ({ plan } = await api(`/api/review/more/${id}`));
+      if (plan && Object.keys(plan.results).length === plan.items.length) {
+        localStorage.removeItem(MORE_REVIEW_KEY);
+        plan = null;
+      }
+    } else ({ plan } = await api('/api/review/today'));
     if (state.review !== review || state.reviewPlanRequest !== request || $('reviewView').hidden) return;
     if (plan) showDailyPlan(plan);
     else {
       review.plan = null;
-      $('reviewIntro').textContent = `保存済みの問題：${review.existingCount}問。準備すると今日の内容を選び、説明を生成します。`;
+      $('reviewIncludeAi').disabled = false;
+      $('reviewIntro').textContent = more
+        ? '好きなタイミングで追加の復習ができます。準備すると新しい問題セットを選びます。'
+        : `保存済みの問題：${review.existingCount}問。準備すると今日の内容を選び、説明を生成します。`;
+      $('reviewPrepare').textContent = more ? 'もっと復習を準備' : '今日の復習を準備';
       $('reviewPrepare').disabled = false;
     }
   } catch (error) { showToast(error.message); $('reviewPrepare').disabled = false; }
@@ -875,11 +901,16 @@ async function prepareDailyPlan() {
   if (!state.review?.existingCount || $('reviewPrepare').disabled) return;
   const review = state.review;
   const includeAi = $('reviewIncludeAi').checked;
+  const more = review.mode === 'more';
+  const moreId = more ? (localStorage.getItem(MORE_REVIEW_KEY) || crypto.randomUUID()) : null;
+  if (more) localStorage.setItem(MORE_REVIEW_KEY, moreId);
   $('reviewPrepare').disabled = true;
   $('reviewIncludeAi').disabled = true;
-  $('reviewIntro').textContent = '今日の問題と内容説明を準備しています…';
+  $('reviewIntro').textContent = '問題と内容説明を準備しています…';
   try {
-    const { plan } = await api('/api/review/today', { method: 'POST', body: JSON.stringify({ includeAi }) });
+    const { plan } = await api(more ? '/api/review/more' : '/api/review/today', {
+      method: 'POST', body: JSON.stringify({ includeAi, ...(more ? { id: moreId } : {}) })
+    });
     if (state.review === review && !$('reviewView').hidden) showDailyPlan(plan);
   } catch (error) {
     showToast(error.message);
@@ -893,7 +924,7 @@ function renderReviewQuestion() {
   const plan = review.plan;
   const position = review.position;
   const item = plan.items[position];
-  $('reviewTitle').textContent = `今日の復習 ${position + 1} / ${plan.items.length}`;
+  $('reviewTitle').textContent = `${review.mode === 'more' ? 'もっと復習' : '今日の復習'} ${position + 1} / ${plan.items.length}`;
   $('reviewIntro').textContent = item.title;
   $('reviewContent').replaceChildren();
   $('reviewNext').hidden = true;
@@ -938,10 +969,10 @@ function renderReviewQuestion() {
     input.disabled = true;
     button.disabled = true;
     try {
-      const response = await api('/api/review/today/answer', { method: 'POST', body: JSON.stringify({
+      const response = await api(review.mode === 'more' ? `/api/review/more/${plan.id}/answer` : '/api/review/today/answer', { method: 'POST', body: JSON.stringify({
         planId: plan.id, includeAi: plan.includeAi, index: position, text
       }) });
-      plan.results[position] = { text, ok: response.ok, source: item.kind === 'ai_review' ? 'ai_review' : 'review' };
+      plan.results[position] = { text, ok: response.ok, source: item.kind === 'ai_review' ? 'ai_review' : review.mode === 'more' ? 'more_review' : 'review' };
       const status = document.createElement('div');
       status.className = response.ok ? 'quiz-ok' : 'quiz-ng';
       status.textContent = response.ok ? '○ 正解' : '× 不正解';
@@ -972,7 +1003,10 @@ function renderReviewQuestion() {
 
 function finishReview() {
   const plan = state.review.plan;
-  $('reviewTitle').textContent = '今日の復習結果';
+  const more = state.review.mode === 'more';
+  if (more) localStorage.removeItem(MORE_REVIEW_KEY);
+  else $('reviewMoreMode').disabled = false;
+  $('reviewTitle').textContent = `${more ? 'もっと復習' : '今日の復習'}結果`;
   $('reviewIntro').textContent = `${plan.items.length}問中 ${Object.values(plan.results).filter(entry => entry.ok).length}問正解`;
   $('reviewContent').replaceChildren();
   $('reviewStart').hidden = true;
@@ -981,7 +1015,7 @@ function finishReview() {
   $('reviewIncludeAi').closest('label').hidden = true;
   const detail = document.createElement('p');
   detail.className = 'review-summary';
-  detail.textContent = '今日の復習を終えました。回答履歴は保存されています。';
+  detail.textContent = more ? '回答履歴を保存しました。もう一度、追加の復習を始められます。' : '今日の復習を終えました。もっと復習も利用できます。';
   $('reviewContent').append(detail);
 }
 

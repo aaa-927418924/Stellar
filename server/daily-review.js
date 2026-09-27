@@ -15,7 +15,10 @@ export function reviewCandidates(chats, now = new Date()) {
   for (const chat of chats) for (const message of chat.messages || []) {
     const quiz = message.quiz;
     if (!quiz?.items?.length) continue;
-    const attempts = quiz.attempts?.length ? quiz.attempts : [legacyAttempt(message)].filter(Boolean);
+    // 任意の追加復習は練習として保存するが、翌日の間隔・連続正解には反映しない。
+    const attempts = quiz.attempts?.length
+      ? quiz.attempts.filter(entry => entry.source !== 'more_review')
+      : [legacyAttempt(message)].filter(Boolean);
     const latest = attempts.at(-1);
     const age = dayGap(latest?.at || message.at, now);
     const lastAnswered = quiz.items.map((_, index) => {
@@ -69,16 +72,42 @@ export function generatedCount(existingCount, includeAi) {
   return Math.min(5, 8 - existingCount);
 }
 
-export function newPlan({ candidates, includeAi, now = new Date() }) {
-  const existingLimit = includeAi ? 10 : 12;
+export function moreGeneratedCount(existingCount, includeAi) {
+  if (!includeAi || existingCount < 1) return 0;
+  if (existingCount >= 5) return 2;
+  return Math.min(5, 7 - existingCount);
+}
+
+export function moreCandidates(chats, now = new Date()) {
+  const candidates = reviewCandidates(chats, now);
+  const recent = new Map();
+  for (const chat of chats) for (const message of chat.messages || []) {
+    for (const attempt of message.quiz?.attempts || []) {
+      if (attempt.source !== 'more_review') continue;
+      attempt.items?.forEach((value, index) => {
+        if (typeof value !== 'boolean') return;
+        const key = `${chat.id}:${message.id}:${index}`;
+        if (!recent.has(key) || recent.get(key) < attempt.at) recent.set(key, attempt.at);
+      });
+    }
+  }
+  return candidates.map(item => {
+    const age = dayGap(recent.get(`${item.chatId}:${item.messageId}:${item.index}`), now);
+    const practiced = recent.has(`${item.chatId}:${item.messageId}:${item.index}`);
+    return { ...item, score: item.score - (practiced && age < 1 / 24 ? 25 : practiced && age < 1 ? 10 : 0) };
+  });
+}
+
+export function newPlan({ candidates, includeAi, kind = 'today', now = new Date() }) {
+  const existingLimit = kind === 'more' ? (includeAi ? 7 : 10) : (includeAi ? 10 : 12);
   const selected = selectReview(candidates, existingLimit);
-  return { id: randomUUID(), day: localDay(now), includeAi, createdAt: now.toISOString(),
+  return { id: randomUUID(), kind, day: localDay(now), includeAi, createdAt: now.toISOString(),
     items: selected, results: {}, explanation: '', status: 'preparing' };
 }
 
 export function publicPlan(plan) {
   if (!plan) return null;
-  return { id: plan.id, day: plan.day, includeAi: plan.includeAi, explanation: plan.explanation,
+  return { id: plan.id, kind: plan.kind || 'today', day: plan.day, includeAi: plan.includeAi, explanation: plan.explanation,
     items: plan.items.map(({ quiz, ...item }) => ({ ...item, quiz: { q: quiz.q, hint: quiz.hint, explanation: quiz.explanation } })),
     results: plan.results };
 }

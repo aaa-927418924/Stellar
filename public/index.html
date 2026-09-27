@@ -139,6 +139,10 @@
       <main class="review-view" id="reviewView" hidden>
         <div class="review-panel">
           <h1 id="reviewTitle">復習</h1>
+          <div class="review-modes" aria-label="復習モード">
+            <button id="reviewTodayMode" type="button" aria-pressed="true">今日の復習</button>
+            <button id="reviewMoreMode" type="button" aria-pressed="false" disabled>もっと復習</button>
+          </div>
           <p class="review-intro" id="reviewIntro"></p>
           <label class="review-option" for="reviewIncludeAi"><input id="reviewIncludeAi" type="checkbox" checked>AI生成の類題を含める</label>
           <div id="reviewContent"></div>

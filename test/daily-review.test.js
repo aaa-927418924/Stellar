@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatReviewExplanation, generatedCount, newPlan, publicPlan, reviewCandidates, selectReview, similarPrompt } from '../server/daily-review.js';
+import { formatReviewExplanation, generatedCount, localDay, moreCandidates, moreGeneratedCount, newPlan, publicPlan, reviewCandidates, selectReview, similarPrompt } from '../server/daily-review.js';
 
 function chat(title, attempts, at = '2026-09-01T00:00:00.000Z') {
   return { id: title, title, messages: [{ id: `${title}-quiz`, at, quiz: {
@@ -31,6 +31,32 @@ test('類題数は保存済み問題数とチェックボックスに従い、�
   assert.equal(generatedCount(4, true), 4);
   assert.equal(generatedCount(10, true), 2);
   assert.equal(generatedCount(12, false), 0);
+  assert.equal(moreGeneratedCount(1, true), 5);
+  assert.equal(moreGeneratedCount(7, true), 2);
+  assert.equal(moreGeneratedCount(10, false), 0);
+});
+
+test('追加復習の短時間の正答は今日の復習の優先度・連続正解に影響しない', () => {
+  const now = new Date('2026-09-27T12:00:00.000Z');
+  const original = chat('数学', [{ source: 'initial', at: '2026-09-10T00:00:00.000Z', items: [false, true], total: 2 }]);
+  const initialScore = reviewCandidates([original], now)[0].score;
+  original.messages[0].quiz.attempts.push(
+    { source: 'more_review', at: '2026-09-27T11:40:00.000Z', items: [true, null], total: 2 },
+    { source: 'more_review', at: '2026-09-27T11:50:00.000Z', items: [true, null], total: 2 }
+  );
+  assert.equal(reviewCandidates([original], now)[0].score, initialScore);
+  assert.ok(moreCandidates([original], now)[0].score < initialScore);
+  assert.equal(moreCandidates([original], new Date('2026-10-01T12:00:00.000Z'))[0].score, reviewCandidates([original], new Date('2026-10-01T12:00:00.000Z'))[0].score);
+});
+
+test('今日の復習は日付が変わると新しいセッションになる', () => {
+  const candidates = reviewCandidates([chat('数学', [])]);
+  const today = newPlan({ candidates, includeAi: false, now: new Date(2026, 8, 27) });
+  const tomorrow = newPlan({ candidates, includeAi: false, now: new Date(2026, 8, 28) });
+  assert.equal(today.day, localDay(new Date(2026, 8, 27)));
+  assert.notEqual(today.day, tomorrow.day);
+  assert.notEqual(today.id, tomorrow.id);
+  assert.equal(newPlan({ candidates, includeAi: true, kind: 'more' }).items.length, 2);
 });
 
 test('同程度の優先度なら異なる内容を選び、強い優先度差は維持する', () => {

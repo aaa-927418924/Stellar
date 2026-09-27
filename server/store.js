@@ -25,10 +25,11 @@ export class Store {
     this.tmpDir = path.join(root, 'tmp');
     this.attachmentsDir = path.join(root, 'attachments');
     this.reviewsDir = path.join(root, 'reviews');
+    this.moreReviewsDir = path.join(this.reviewsDir, 'more');
   }
 
   async init() {
-    await Promise.all([this.chatsDir, this.lessonsDir, this.tmpDir, this.attachmentsDir, this.reviewsDir].map(dir => mkdir(dir, { recursive: true })));
+    await Promise.all([this.chatsDir, this.lessonsDir, this.tmpDir, this.attachmentsDir, this.reviewsDir, this.moreReviewsDir].map(dir => mkdir(dir, { recursive: true })));
   }
 
   chatPath(id) {
@@ -144,5 +145,25 @@ export class Store {
 
   async saveReview(plan) {
     await writeDocument(this.reviewPath(plan.day, plan.includeAi), JSON.stringify(plan, null, 2));
+  }
+
+  async dailyReview(day) {
+    const plans = (await Promise.all([this.review(day, true), this.review(day, false)])).filter(Boolean);
+    return plans.find(plan => plan.items?.length && Object.keys(plan.results || {}).length === plan.items.length)
+      || plans.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))[0] || null;
+  }
+
+  moreReviewPath(id) {
+    if (!idPattern.test(id)) throw new Error('復習IDが不正です。');
+    return path.join(this.moreReviewsDir, `${id}.json`);
+  }
+
+  async moreReview(id) {
+    try { return JSON.parse(await readFile(this.moreReviewPath(id), 'utf8')); }
+    catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  }
+
+  async saveMoreReview(plan) {
+    await writeDocument(this.moreReviewPath(plan.id), JSON.stringify(plan, null, 2));
   }
 }
