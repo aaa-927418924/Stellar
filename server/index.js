@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { Store } from './store.js';
 import { buildPrompt, extractHtml } from './prompts.js';
+import { judgeAnswer, parseQuiz } from './quiz.js';
 import { runOpenCode, listModels, findOpenCode, DEFAULT_MODEL } from './opencode.js';
 import { appendProgress, progressFromEvent } from './progress.js';
 
@@ -131,6 +132,16 @@ async function runJob({ chat, text, action, model, attachments, lesson, controll
     } else if (action === 'organize') {
       response = response.slice(0, 500);
       organizePrompt = true;
+    } else if (action === 'ask' || action === 'question') {
+      const items = parseQuiz(result);
+      if (items) {
+        response = `問題を${items.length}問作成しました。下の入力欄に答えてください。`;
+        chat.messages.push({ id: randomUUID(), role: 'assistant', text: response, quiz: { items, results: {} }, progress: chat.job.progress, at: new Date().toISOString() });
+        appendProgress(chat, 'status', '完了しました。');
+        chat.job = null;
+        await store.save(chat);
+        return;
+      }
     }
     appendProgress(chat, 'status', '完了しました。');
     chat.messages.push({ id: randomUUID(), role: 'assistant', text: response, ...(organizePrompt ? { organizePrompt: true } : {}), progress: chat.job.progress, at: new Date().toISOString() });
@@ -249,6 +260,26 @@ export async function createServer() {
       }
       const sendMatch = /^\/api\/chats\/([0-9a-f-]{36})\/send$/.exec(url.pathname);
       if (req.method === 'POST' && sendMatch) return send(req, res, sendMatch[1]);
+      const answerMatch = /^\/api\/chats\/([0-9a-f-]{36})\/messages\/([0-9a-f-]{36})\/answer$/.exec(url.pathname);
+      if (req.method === 'POST' && answerMatch) {
+        const chat = await store.get(answerMatch[1]);
+        const message = chat?.messages.find(item => item.id === answerMatch[2] && item.quiz);
+        if (!message) return fail(res, 404, '問題が見つかりません。');
+        const payload = await body(req);
+        const index = Number(payload.index);
+        const text = String(payload.text || '');
+        const item = message.quiz.items[index];
+        if (!Number.isInteger(index) || !item || !text.trim() || text.length > 500) {
+          return fail(res, 400, '回答は1～500文字で入力してください。');
+        }
+        const ok = judgeAnswer(text, item.answers);
+        const current = message.quiz.results[index] || { attempts: 0, correct: 0 };
+        const entry = { attempts: current.attempts + 1, correct: current.correct + (ok ? 1 : 0), lastOk: ok };
+        const results = { ...message.quiz.results, [index]: entry };
+        message.quiz = { items: message.quiz.items, results };
+        await store.save(chat);
+        return json(res, 200, { ok, attempts: entry.attempts, lastOk: entry.lastOk, explanation: ok ? item.explanation : '' });
+      }
       const cancelMatch = /^\/api\/chats\/([0-9a-f-]{36})\/cancel$/.exec(url.pathname);
       if (req.method === 'POST' && cancelMatch) {
         const controller = active.get(cancelMatch[1]);

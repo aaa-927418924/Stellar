@@ -176,6 +176,91 @@ function closeLightbox() {
   document.body.classList.remove('lightbox-open');
 }
 
+function paintQuizResult(box, message, index) {
+  box.replaceChildren();
+  const state = message.quiz.results[index];
+  if (!state || !state.attempts) return;
+  const status = document.createElement('div');
+  status.className = state.lastOk ? 'quiz-ok' : 'quiz-ng';
+  status.textContent = state.lastOk ? `○ 正解（${state.attempts}回目）` : `× 不正解（${state.attempts}回挑戦中）`;
+  box.append(status);
+  const item = message.quiz.items[index];
+  if (state.lastOk && item.explanation) {
+    const explanation = document.createElement('div');
+    explanation.className = 'quiz-explanation';
+    renderMarkdown(explanation, item.explanation);
+    box.append(explanation);
+  }
+}
+
+function quizElement(message) {
+  const wrap = document.createElement('div');
+  wrap.className = 'quiz';
+  message.quiz.items.forEach((item, index) => {
+    const block = document.createElement('div');
+    block.className = 'quiz-item';
+    const head = document.createElement('div');
+    head.className = 'quiz-q';
+    head.textContent = `Q${index + 1}`;
+    const body = document.createElement('div');
+    renderMarkdown(body, item.q);
+    block.append(head, body);
+    if (item.hint) {
+      const hint = document.createElement('details');
+      hint.className = 'quiz-hint';
+      const summary = document.createElement('summary');
+      summary.textContent = 'ヒント';
+      const text = document.createElement('div');
+      text.textContent = item.hint;
+      hint.append(summary, text);
+      block.append(hint);
+    }
+    const row = document.createElement('div');
+    row.className = 'quiz-row';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 500;
+    input.placeholder = '答えを入力してEnter';
+    input.setAttribute('aria-label', `問題${index + 1}の回答`);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = '判定';
+    const result = document.createElement('div');
+    result.className = 'quiz-result';
+    paintQuizResult(result, message, index);
+    const judge = async () => {
+      const value = input.value;
+      if (!value.trim() || input.disabled) return;
+      input.disabled = true;
+      button.disabled = true;
+      try {
+        const response = await api(`/api/chats/${state.current.id}/messages/${message.id}/answer`, {
+          method: 'POST',
+          body: JSON.stringify({ index, text: value })
+        });
+        const entry = { attempts: response.attempts, correct: (message.quiz.results[index]?.correct || 0) + (response.ok ? 1 : 0), lastOk: response.ok };
+        message.quiz.results[index] = entry;
+        paintQuizResult(result, message, index);
+        input.disabled = response.ok;
+      } catch (error) {
+        showToast(error.message);
+        input.disabled = false;
+      } finally {
+        button.disabled = false;
+        input.focus();
+      }
+    };
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.isComposing) judge();
+    });
+    button.addEventListener('click', judge);
+    row.append(input, button);
+    block.append(row, result);
+    wrap.append(block);
+  });
+  return wrap;
+}
+
 function messageElement(message) {
   const element = document.createElement('div');
   element.className = `message ${message.role}`;
@@ -223,6 +308,7 @@ function messageElement(message) {
   if (message.role === 'assistant') renderMarkdown(body, message.text);
   else appendMessageText(body, message.text);
   element.append(body);
+  if (message.quiz?.items?.length) element.append(quizElement(message));
   if (message.pending && message.progress?.length) {
     const details = document.createElement('details');
     details.className = 'progress-log';

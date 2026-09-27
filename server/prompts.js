@@ -25,7 +25,14 @@ export function buildPrompt({ chat, text, action, lesson }) {
   if (action === 'create' || action === 'revise') {
     return `${STUDY_RULES}\n\n${action === 'revise' ? '現在の教材HTMLを改善し、完全な新しいHTMLを返してください。変更指示以外の有効な内容も維持してください。' : '新しい教材HTMLを作成してください。'}\n\nこれまでの会話:\n${history(chat) || 'なし'}\n\n${lesson ? `現在の教材HTML:\n${lesson.slice(0, 55000)}\n\n` : ''}今回の依頼:\n${text}`;
   }
-  return `あなたは学習中の質問に答える先生です。日本語で、対象レベルに合わせて簡潔かつ正確に説明してください。分からない事実や出典は推測で埋めないでください。教材の修正は頼まれていないので、回答だけを返してください。\n\n会話:\n${history(chat) || 'なし'}\n\n教材の内容:\n${lesson ? lesson.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 18000) : '教材はまだありません。'}\n\n質問:\n${text}`;
+  return `あなたは学習中の質問に答える先生です。日本語で、対象レベルに合わせて簡潔かつ正確に説明してください。分からない事実や出典は推測で埋めないでください。教材の修正は頼まれていないので、回答だけを返してください。
+
+ただし「問題を作って」「問題を出して」など問題作成を頼まれた場合は、文章ではなく次のJSONだけを出力してください（Markdownフェンス付き可、前置き・後書きなし）。
+{"quiz": [{"q": "問題文", "answer": ["正答1", "正答2"], "hint": "ヒント（任意）", "explanation": "解説（正解後に表示）"}]}
+- qはMarkdown記法が使えます。answerは複数可。正誤判定は完全一致で行うため、答えは一意に定まる形にしてください。
+- 問題は最大10問まで。解説は正解後に表示されます。
+
+会話:\n${history(chat) || 'なし'}\n\n教材の内容:\n${lesson ? lesson.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 18000) : '教材はまだありません。'}\n\n質問:\n${text}`;
 }
 
 export function extractHtml(text) {
