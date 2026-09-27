@@ -1,5 +1,3 @@
-![Stellar icon](window/StudyWindow/app.ico)
-
 # Stellar
 
 A local Windows study app that turns questions into interactive lessons and quizzes with the OpenCode CLI.
