@@ -7,7 +7,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>StudyApp</AssemblyName>
-    <Version>0.27.0</Version>
+    <Version>0.28.0</Version>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

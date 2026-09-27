@@ -177,6 +177,7 @@ function closeLightbox() {
 }
 
 const quizSessions = new Map();
+const quizDraftLive = new Map();
 
 function quizSessionId(messageId) {
   if (!quizSessions.has(messageId)) quizSessions.set(messageId, crypto.randomUUID());
@@ -227,7 +228,7 @@ function applyQuizDrafts(extra) {
   for (const input of document.querySelectorAll('.quiz-row input[data-message]')) {
     if (input.value || input.disabled) continue;
     const key = quizDraftKey(input.dataset.message, input.dataset.index);
-    const value = (extra && extra.get(key)) || stored[key];
+    const value = quizDraftLive.get(key) || (extra && extra.get(key)) || stored[key];
     if (value) input.value = value;
   }
 }
@@ -292,7 +293,10 @@ function quizElement(message, options = {}) {
     input.dataset.message = message.id;
     input.dataset.index = String(index);
     input.disabled = !!(results[index] && results[index].attempts > 0);
-    input.addEventListener('input', () => saveQuizDraft(quizDraftKey(message.id, index), input.value));
+    input.addEventListener('input', () => {
+      quizDraftLive.set(quizDraftKey(message.id, index), input.value);
+      saveQuizDraft(quizDraftKey(message.id, index), input.value);
+    });
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = '判定';
@@ -313,6 +317,7 @@ function quizElement(message, options = {}) {
         results[index] = entry;
         paintQuizResult(result, quiz, index);
         clearQuizDraft(quizDraftKey(message.id, index));
+        quizDraftLive.delete(quizDraftKey(message.id, index));
         input.disabled = true;
         if (options.onJudged) {
           try { await options.onJudged(); }
