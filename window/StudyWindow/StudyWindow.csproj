@@ -9,7 +9,7 @@
     <AssemblyName>Stellar</AssemblyName>
     <Product>Stellar</Product>
     <Title>Stellar</Title>
-    <Version>0.35.0</Version>
+    <Version>0.36.0</Version>
     <ApplicationIcon>app.ico</ApplicationIcon>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

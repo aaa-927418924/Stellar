@@ -224,7 +224,7 @@ function clearQuizDraft(key) {
 
 function collectQuizDrafts() {
   const drafts = new Map();
-  for (const input of document.querySelectorAll('.quiz-row input[data-message]')) {
+  for (const input of $('messages').querySelectorAll('.quiz-row input[data-message]')) {
     if (input.value) drafts.set(quizDraftKey(input.dataset.message, input.dataset.index), input.value);
   }
   return drafts;
@@ -232,7 +232,7 @@ function collectQuizDrafts() {
 
 function applyQuizDrafts(extra) {
   const stored = loadQuizDrafts();
-  for (const input of document.querySelectorAll('.quiz-row input[data-message]')) {
+  for (const input of $('messages').querySelectorAll('.quiz-row input[data-message]')) {
     if (input.value || input.disabled) continue;
     const key = quizDraftKey(input.dataset.message, input.dataset.index);
     const value = quizDraftLive.get(key) || (extra && extra.get(key)) || stored[key];
