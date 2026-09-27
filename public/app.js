@@ -202,7 +202,7 @@ function paintQuizResult(box, quiz, index) {
 function quizElement(message, options = {}) {
   const chatId = options.chatId || state.current?.id;
   const source = options.source || 'initial';
-  const results = options.fresh ? {} : message.quiz.results;
+  const results = options.fresh ? {} : (message.quiz.results || {});
   const quiz = { items: message.quiz.items, results };
   const wrap = document.createElement('div');
   wrap.className = 'quiz';
@@ -232,6 +232,7 @@ function quizElement(message, options = {}) {
     input.maxLength = 500;
     input.placeholder = '答えを入力してEnter';
     input.setAttribute('aria-label', `問題${index + 1}の回答`);
+    input.disabled = !!(results[index] && results[index].attempts > 0);
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = '判定';
